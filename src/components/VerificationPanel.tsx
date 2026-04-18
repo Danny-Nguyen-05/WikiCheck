@@ -11,7 +11,7 @@ import SkeletonCard from "./SkeletonCard";
 
 interface VerificationPanelProps {
   citations: Citation[];
-  results: Map<number, CitationResult>;
+  results: Map<string, CitationResult>;
   totalCitations: number;
   isVerifying: boolean;
   isPaused: boolean;
@@ -61,7 +61,7 @@ export default function VerificationPanel({
   const filteredCitations = useMemo(() => {
     return citations.filter((c) => {
       if (filter === "all") return true;
-      const result = results.get(c.number);
+      const result = results.get(c.id);
       return result?.verdict === filter;
     });
   }, [citations, results, filter]);
@@ -104,7 +104,7 @@ export default function VerificationPanel({
             onClick={onStart}
             className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700 transition-colors"
           >
-            ▶ Start Verification ({totalCitations} citations)
+            ▶ Start Verification ({totalCitations} verifiable items)
           </button>
         )}
         {/* Progress + stop/continue — shown once verification has started */}
@@ -136,11 +136,11 @@ export default function VerificationPanel({
       <div className="flex-1 overflow-y-auto p-4">
         <div className="space-y-3">
           {filteredCitations.map((citation) => {
-            const result = results.get(citation.number);
+            const result = results.get(citation.id);
             if (result) {
               return (
                 <CitationCard
-                  key={citation.number}
+                  key={citation.id}
                   result={result}
                   claim={citation.claim}
                   sourceUrl={citation.sourceUrl}
@@ -161,7 +161,7 @@ export default function VerificationPanel({
           {/* Empty state */}
           {!isVerifying && filteredCitations.length === 0 && results.size > 0 && (
             <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-              No citations match this filter.
+              No verifiable items match this filter.
             </div>
           )}
         </div>

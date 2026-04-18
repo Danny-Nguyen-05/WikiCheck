@@ -1,4 +1,5 @@
 export interface Citation {
+  id: string;
   number: number;
   claim: string;
   sourceUrl: string;
@@ -9,11 +10,14 @@ export interface Citation {
  * Parse Wikipedia wikitext to extract citations with their claims and source URLs.
  */
 export function parseCitations(wikitext: string): Citation[] {
-  // Step 0: Strip non-prose sections (infoboxes, templates, tables, categories, etc.)
-  // We only want refs that appear in actual article prose.
+  // Step 0: Mask non-prose sections (infoboxes, templates, tables, categories, etc.)
+  // We keep string length intact so ref indices still line up with the original wikitext.
   const proseText = extractProseText(wikitext);
 
-  // Step 1: Build a map of named refs (name → full ref content) from the FULL wikitext
+  // Step 1: Assign Wikipedia-style visible numbers across the full page.
+  const visibleRefNumbers = buildVisibleRefNumbers(wikitext);
+
+  // Step 2: Build a map of named refs (name → full ref content) from the FULL wikitext
   // (definitions may be in non-prose sections but referenced in prose)
   const namedRefs = new Map<string, string>();
   const fullRefRegex = /<ref\s+name\s*=\s*["']?([^"'\s/>]+)["']?\s*>([\s\S]*?)<\/ref>/gi;
@@ -27,17 +31,19 @@ export function parseCitations(wikitext: string): Citation[] {
     }
   }
 
-  // Step 2: Find all ref occurrences in the PROSE text only
+  // Step 3: Find all ref occurrences in the PROSE text only
   const allRefsRegex = /<ref(?:\s+name\s*=\s*["']?([^"'\s/>]+)["']?)?\s*(?:\/?>([\s\S]*?)<\/ref>|\s*\/>)/gi;
 
   const citations: Citation[] = [];
-  let citationNumber = 1;
   const seenKeys = new Set<string>();
 
   while ((match = allRefsRegex.exec(proseText)) !== null) {
     const refName = match[1]?.toLowerCase();
     const refContent = match[2] || "";
     const refStart = match.index;
+    const visibleNumber = visibleRefNumbers.get(refStart);
+
+    if (!visibleNumber) continue;
 
     // Get the ref content — either inline or from the named refs map
     let content = refContent.trim();
@@ -64,7 +70,8 @@ export function parseCitations(wikitext: string): Citation[] {
     seenKeys.add(key);
 
     citations.push({
-      number: citationNumber++,
+      id: `citation-${visibleNumber}-${refStart}`,
+      number: visibleNumber,
       claim,
       sourceUrl: url,
       refName: refName || undefined,
@@ -87,25 +94,57 @@ function extractProseText(wikitext: string): string {
   while (prev !== text) {
     prev = text;
     // Remove innermost templates (no nested {{ inside)
-    text = text.replace(/\{\{(?:[^{}]|\n)*?\}\}/g, "");
+    text = text.replace(/\{\{(?:[^{}]|\n)*?\}\}/g, preserveWhitespace);
   }
 
   // Remove tables {| ... |}
-  text = text.replace(/\{\|[\s\S]*?\|\}/g, "");
+  text = text.replace(/\{\|[\s\S]*?\|\}/g, preserveWhitespace);
 
   // Remove categories [[Category:...]]
-  text = text.replace(/\[\[Category:[^\]]*\]\]/gi, "");
+  text = text.replace(/\[\[Category:[^\]]*\]\]/gi, preserveWhitespace);
 
   // Remove file/image links [[File:...]] and [[Image:...]]
-  text = text.replace(/\[\[(?:File|Image):[^\]]*\]\]/gi, "");
+  text = text.replace(/\[\[(?:File|Image):[^\]]*\]\]/gi, preserveWhitespace);
 
   // Remove __TOC__, __NOTOC__, etc.
-  text = text.replace(/__[A-Z]+__/g, "");
+  text = text.replace(/__[A-Z]+__/g, preserveWhitespace);
 
   // Remove lines that start with | or ! (table rows that survived)
-  text = text.replace(/^\s*[|!].*$/gm, "");
+  text = text.replace(/^\s*[|!].*$/gm, preserveWhitespace);
 
   return text;
+}
+
+function buildVisibleRefNumbers(wikitext: string): Map<number, number> {
+  const refsByIndex = new Map<number, number>();
+  const namedRefNumbers = new Map<string, number>();
+  const allRefsRegex = /<ref(?:\s+name\s*=\s*["']?([^"'\s/>]+)["']?)?\s*(?:\/?>([\s\S]*?)<\/ref>|\s*\/>)/gi;
+
+  let match: RegExpExecArray | null;
+  let nextVisibleNumber = 1;
+
+  while ((match = allRefsRegex.exec(wikitext)) !== null) {
+    const refName = match[1]?.toLowerCase();
+
+    if (refName) {
+      const existing = namedRefNumbers.get(refName);
+      if (existing) {
+        refsByIndex.set(match.index, existing);
+        continue;
+      }
+
+      namedRefNumbers.set(refName, nextVisibleNumber);
+    }
+
+    refsByIndex.set(match.index, nextVisibleNumber);
+    nextVisibleNumber += 1;
+  }
+
+  return refsByIndex;
+}
+
+function preserveWhitespace(match: string): string {
+  return match.replace(/[^\n]/g, " ");
 }
 
 /**

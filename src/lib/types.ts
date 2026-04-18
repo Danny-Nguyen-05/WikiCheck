@@ -1,6 +1,7 @@
 export type Verdict = "supported" | "partial" | "unsupported" | "unverifiable";
 
 export interface CitationResult {
+  id: string;
   number: number;
   verdict: Verdict;
   confidence: number;
@@ -16,6 +17,7 @@ export interface SearchResult {
 }
 
 export interface Citation {
+  id: string;
   number: number;
   claim: string;
   sourceUrl: string;

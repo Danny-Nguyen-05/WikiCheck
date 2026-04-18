@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import ArticlePanel from "@/components/ArticlePanel";
 import VerificationPanel from "@/components/VerificationPanel";
@@ -18,7 +18,7 @@ export default function ResultsPage() {
   const [articleTitle, setArticleTitle] = useState(title);
   const [citations, setCitations] = useState<Citation[]>([]);
   const [activeCitations, setActiveCitations] = useState<Citation[]>([]);
-  const [verificationResults, setVerificationResults] = useState<Map<number, CitationResult>>(
+  const [verificationResults, setVerificationResults] = useState<Map<string, CitationResult>>(
     new Map()
   );
   const [highlightedCitation, setHighlightedCitation] = useState<number | null>(null);
@@ -28,6 +28,14 @@ export default function ResultsPage() {
   const [mode, setMode] = useState<Mode>("article");
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const articleVerificationResults = useMemo(() => {
+    const byNumber = new Map<number, CitationResult>();
+    verificationResults.forEach((result) => {
+      byNumber.set(result.number, result);
+    });
+    return byNumber;
+  }, [verificationResults]);
 
   // Fetch article
   useEffect(() => {
@@ -94,7 +102,7 @@ export default function ResultsPage() {
             const result: CitationResult = JSON.parse(line);
             setVerificationResults((prev) => {
               const next = new Map(prev);
-              next.set(result.number, result);
+              next.set(result.id, result);
               return next;
             });
           } catch {
@@ -153,7 +161,7 @@ export default function ResultsPage() {
   }
 
   function handleContinue() {
-    const remaining = activeCitations.filter((c) => !verificationResults.has(c.number));
+    const remaining = activeCitations.filter((c) => !verificationResults.has(c.id));
     if (remaining.length > 0) {
       verifyCitations(remaining);
     }
@@ -204,7 +212,7 @@ export default function ResultsPage() {
         <ArticlePanel
           html={articleHtml}
           title={articleTitle}
-          verificationResults={verificationResults}
+          verificationResults={articleVerificationResults}
           highlightedCitation={highlightedCitation}
         />
       </div>
@@ -216,7 +224,7 @@ export default function ResultsPage() {
             onClick={handleFullCheck}
             disabled={citations.length === 0}
             className="group relative flex h-36 w-10 flex-col items-center justify-center gap-2 rounded-md bg-blue-600 text-white shadow transition-all hover:w-11 hover:bg-blue-700 hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Verify all citations"
+            title="Verify all extracted citations"
           >
             <span className="text-base">🔍</span>
             <span className="whitespace-nowrap text-[11px] font-bold tracking-wide [writing-mode:vertical-lr] rotate-180">
@@ -227,7 +235,7 @@ export default function ResultsPage() {
             onClick={handleSpecificCheck}
             disabled={citations.length === 0}
             className="group relative flex h-36 w-10 flex-col items-center justify-center gap-2 rounded-md bg-purple-600 text-white shadow transition-all hover:w-11 hover:bg-purple-700 hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Choose specific citations to verify"
+            title="Choose specific extracted citations to verify"
           >
             <span className="text-base">📋</span>
             <span className="whitespace-nowrap text-[11px] font-bold tracking-wide [writing-mode:vertical-lr] rotate-180">
@@ -236,7 +244,7 @@ export default function ResultsPage() {
           </button>
           {citations.length > 0 && (
             <span className="text-[10px] font-medium text-gray-400 [writing-mode:vertical-lr] rotate-180">
-              {citations.length} citations
+              {citations.length} verifiable
             </span>
           )}
         </div>

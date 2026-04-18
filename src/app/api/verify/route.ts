@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
         for (let i = 0; i < citations.length; i += MAX_CONCURRENT) {
           const batch = citations.slice(i, i + MAX_CONCURRENT);
 
-          const results = await Promise.allSettled(
+          const results = await Promise.all(
             batch.map(async (citation) => {
               try {
                 // Fetch source content (with caching)
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
 
                 if (!source.markdown) {
                   return {
+                    id: citation.id,
                     number: citation.number,
                     verdict: "unverifiable" as const,
                     confidence: 0,
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
                 );
 
                 return {
+                  id: citation.id,
                   number: citation.number,
                   verdict: result.verdict,
                   confidence: result.confidence,
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
                 };
               } catch {
                 return {
+                  id: citation.id,
                   number: citation.number,
                   verdict: "unverifiable" as const,
                   confidence: 0,
@@ -77,19 +80,7 @@ export async function POST(request: NextRequest) {
           );
 
           // Stream each result as a newline-delimited JSON line
-          for (const result of results) {
-            const value =
-              result.status === "fulfilled"
-                ? result.value
-                : {
-                    number: 0,
-                    verdict: "unverifiable",
-                    confidence: 0,
-                    explanation: "Verification failed",
-                    relevant_passage: null,
-                    sourceType: "unknown",
-                  };
-
+          for (const value of results) {
             controller.enqueue(
               encoder.encode(JSON.stringify(value) + "\n")
             );

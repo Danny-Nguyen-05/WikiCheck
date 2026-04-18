@@ -14,7 +14,7 @@ export default function ProgressBar({ current, total }: ProgressBarProps) {
     <div className="w-full">
       <div className="mb-1 flex items-center justify-between text-sm">
         <span className="text-gray-600 dark:text-gray-400">
-          Verifying {current} of {total} citations...
+          Verifying {current} of {total} verifiable items...
         </span>
         <span className="font-medium text-blue-600 dark:text-blue-400">{percent}%</span>
       </div>

@@ -14,19 +14,19 @@ export default function CitationPicker({
   onConfirm,
   onCancel,
 }: CitationPickerProps) {
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  function toggle(num: number) {
+  function toggle(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(num)) next.delete(num);
-      else next.add(num);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
   function selectAll() {
-    setSelected(new Set(citations.map((c) => c.number)));
+    setSelected(new Set(citations.map((c) => c.id)));
   }
 
   function selectNone() {
@@ -34,7 +34,7 @@ export default function CitationPicker({
   }
 
   function handleConfirm() {
-    const picked = citations.filter((c) => selected.has(c.number));
+    const picked = citations.filter((c) => selected.has(c.id));
     if (picked.length > 0) onConfirm(picked);
   }
 
@@ -43,10 +43,10 @@ export default function CitationPicker({
       {/* Header */}
       <div className="border-b border-gray-200 bg-white px-4 py-4 dark:border-gray-700 dark:bg-gray-900">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-          Select Citations to Verify
+          Select Verifiable Citations
         </h2>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Choose which citations you want to check ({selected.size} of {citations.length} selected)
+          Choose which extracted claim-source pairs to check ({selected.size} of {citations.length} selected)
         </p>
         <div className="mt-3 flex gap-2">
           <button
@@ -69,10 +69,10 @@ export default function CitationPicker({
         <div className="space-y-2">
           {citations.map((citation) => (
             <button
-              key={citation.number}
-              onClick={() => toggle(citation.number)}
+              key={citation.id}
+              onClick={() => toggle(citation.id)}
               className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                selected.has(citation.number)
+                selected.has(citation.id)
                   ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/30"
                   : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-750"
               }`}
@@ -80,12 +80,12 @@ export default function CitationPicker({
               <div className="flex items-start gap-3">
                 <div
                   className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors ${
-                    selected.has(citation.number)
+                    selected.has(citation.id)
                       ? "border-blue-500 bg-blue-500 text-white"
                       : "border-gray-300 dark:border-gray-600"
                   }`}
                 >
-                  {selected.has(citation.number) && (
+                  {selected.has(citation.id) && (
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
@@ -123,7 +123,7 @@ export default function CitationPicker({
           disabled={selected.size === 0}
           className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Verify {selected.size} Citation{selected.size !== 1 ? "s" : ""}
+          Verify {selected.size} Item{selected.size !== 1 ? "s" : ""}
         </button>
       </div>
     </div>
