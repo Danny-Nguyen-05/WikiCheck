@@ -12,17 +12,11 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
+body, html {
+  background-color: #fbfbfd;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  color-scheme: light; /* Ensures browser native UI elements and overscroll background are light */
 }
 
 /* Wikipedia article content styling — always light mode */
@@ -89,6 +83,24 @@ body {
   font-size: 0.85rem;
 }
 
+/* Restore lists which are reset by Tailwind */
+.wikipedia-content ul {
+  list-style-type: disc !important;
+  padding-left: 2rem !important;
+  margin-bottom: 1rem;
+}
+
+.wikipedia-content ol, .wikipedia-content .references {
+  list-style-type: decimal !important;
+  padding-left: 2.5rem !important;
+  margin-bottom: 1rem;
+}
+
+.wikipedia-content li {
+  margin-bottom: 0.25rem;
+  display: list-item;
+}
+
 /* Citation highlight badges */
 .wikicheck-citation {
   padding: 1px 3px;
@@ -115,28 +127,6 @@ body {
 .wikicheck-unverifiable {
   background-color: #f3f4f6;
   color: #4b5563;
-}
-
-@media (prefers-color-scheme: dark) {
-  .wikicheck-supported {
-    background-color: #166534;
-    color: #dcfce7;
-  }
-
-  .wikicheck-partial {
-    background-color: #854d0e;
-    color: #fef9c3;
-  }
-
-  .wikicheck-unsupported {
-    background-color: #991b1b;
-    color: #fecaca;
-  }
-
-  .wikicheck-unverifiable {
-    background-color: #374151;
-    color: #d1d5db;
-  }
 }
 
 /* Highlight pulse animation */

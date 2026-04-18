@@ -13,12 +13,12 @@ export default function ProgressBar({ current, total }: ProgressBarProps) {
   return (
     <div className="w-full">
       <div className="mb-1 flex items-center justify-between text-sm">
-        <span className="text-gray-600 dark:text-gray-400">
+        <span className="text-gray-600 ">
           Verifying {current} of {total} verifiable items...
         </span>
-        <span className="font-medium text-blue-600 dark:text-blue-400">{percent}%</span>
+        <span className="font-medium text-blue-600 ">{percent}%</span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 ">
         <div
           className="h-full rounded-full bg-blue-600 transition-all duration-300 ease-out"
           style={{ width: `${percent}%` }}

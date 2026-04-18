@@ -4,7 +4,11 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { SearchResult } from "@/lib/types";
 
-export default function SearchBar() {
+interface SearchBarProps {
+  variant?: "default" | "compact";
+}
+
+export default function SearchBar({ variant = "default" }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -53,22 +57,26 @@ export default function SearchBar() {
 
   function handleSelect(title: string) {
     setIsOpen(false);
-    setQuery(title);
+    setQuery("");
     router.push(`/results/${encodeURIComponent(title)}`);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && query.trim()) {
       setIsOpen(false);
-      router.push(`/results/${encodeURIComponent(query.trim())}`);
+      const q = query.trim();
+      setQuery("");
+      router.push(`/results/${encodeURIComponent(q)}`);
     }
   }
 
+  const isCompact = variant === "compact";
+
   return (
-    <div ref={containerRef} className="relative w-full max-w-2xl">
-      <div className="relative">
+    <div ref={containerRef} className={`relative w-full ${isCompact ? "max-w-md" : "max-w-2xl"}`}>
+      <div className="relative flex items-center">
         <svg
-          className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"
+          className={`absolute left-4 text-gray-400 ${isCompact ? "h-4 w-4" : "h-5 w-5"}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -86,29 +94,33 @@ export default function SearchBar() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => results.length > 0 && setIsOpen(true)}
-          placeholder="Search Wikipedia articles to verify..."
-          className="w-full rounded-full border border-gray-300 bg-white py-4 pl-12 pr-6 text-lg shadow-sm transition-shadow focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:shadow-md dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:border-blue-500 dark:focus:ring-blue-900"
+          placeholder="Search Wikipedia articles..."
+          className={`
+            w-full rounded-full border border-gray-200 bg-white placeholder-gray-400
+            transition-all focus:border-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-500/10
+            ${isCompact ? "py-2 pl-10 pr-10 text-sm shadow-sm hover:shadow-md" : "py-4 pl-12 pr-6 text-lg shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_24px_rgba(0,0,0,0.12)]"}
+          `}
         />
         {isLoading && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
+          <div className="absolute right-4">
+            <div className={`animate-spin rounded-full border-2 border-gray-200 border-t-blue-500 ${isCompact ? "h-4 w-4" : "h-5 w-5"}`} />
           </div>
         )}
       </div>
 
       {isOpen && results.length > 0 && (
-        <div className="absolute z-50 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+        <div className={`absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-gray-100 bg-white/80 backdrop-blur-xl shadow-xl ${isCompact ? "text-sm" : "text-base"}`}>
           {results.map((result) => (
             <button
               key={result.title}
               onClick={() => handleSelect(result.title)}
-              className="flex w-full flex-col px-5 py-3 text-left transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-gray-50 dark:hover:bg-gray-700"
+              className="flex w-full flex-col px-5 py-3 text-left transition-colors hover:bg-black/5"
             >
-              <span className="font-medium text-gray-900 dark:text-white">
+              <span className="font-semibold text-gray-900 tracking-tight">
                 {result.title}
               </span>
               {result.description && (
-                <span className="mt-0.5 text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
+                <span className="mt-0.5 text-gray-500 line-clamp-1">
                   {result.description}
                 </span>
               )}
@@ -119,3 +131,4 @@ export default function SearchBar() {
     </div>
   );
 }
+

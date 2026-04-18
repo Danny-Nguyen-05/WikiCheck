@@ -25,9 +25,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased bg-[#fbfbfd] overscroll-none`}
     >
-      <body className="h-full flex flex-col">{children}</body>
+      <body className="h-full flex flex-col bg-[#fbfbfd] text-[#1d1d1f] overscroll-none">{children}</body>
     </html>
   );
 }

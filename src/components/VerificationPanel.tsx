@@ -71,13 +71,13 @@ export default function VerificationPanel({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="space-y-3 border-b border-gray-200 bg-white px-4 py-4 dark:border-gray-700 dark:bg-gray-900">
+      <div className="space-y-3 border-b border-gray-200 bg-white px-4 py-4  ">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {onBack && (
               <button
                 onClick={onBack}
-                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700   "
                 title="Back to article"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -85,7 +85,7 @@ export default function VerificationPanel({
                 </svg>
               </button>
             )}
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+            <h2 className="text-lg font-bold text-gray-900 ">
               Verification Results
             </h2>
           </div>
@@ -133,7 +133,7 @@ export default function VerificationPanel({
         <FilterBar active={filter} onChange={setFilter} counts={counts} />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto overscroll-y-none p-4">
         <div className="space-y-3">
           {filteredCitations.map((citation) => {
             const result = results.get(citation.id);
@@ -160,7 +160,7 @@ export default function VerificationPanel({
 
           {/* Empty state */}
           {!isVerifying && filteredCitations.length === 0 && results.size > 0 && (
-            <div className="py-12 text-center text-gray-500 dark:text-gray-400">
+            <div className="py-12 text-center text-gray-500 ">
               No verifiable items match this filter.
             </div>
           )}

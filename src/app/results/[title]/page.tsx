@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import ArticlePanel from "@/components/ArticlePanel";
 import VerificationPanel from "@/components/VerificationPanel";
 import CitationPicker from "@/components/CitationPicker";
+import SearchBar from "@/components/SearchBar";
 import type { Citation, CitationResult } from "@/lib/types";
 
 type Mode = "article" | "picking" | "verifying";
@@ -177,10 +178,10 @@ export default function ResultsPage() {
     return (
       <main className="flex flex-1 items-center justify-center">
         <div className="text-center">
-          <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">
+          <h1 className="mb-2 text-2xl font-bold text-gray-900 ">
             {error}
           </h1>
-          <p className="text-gray-500 dark:text-gray-400">
+          <p className="text-gray-500 ">
             Could not find the article &ldquo;{title}&rdquo;
           </p>
           <Link
@@ -199,83 +200,89 @@ export default function ResultsPage() {
       <main className="flex flex-1 items-center justify-center">
         <div className="text-center">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
-          <p className="text-gray-600 dark:text-gray-400">Loading article...</p>
+          <p className="text-gray-600 ">Loading article...</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="flex overflow-hidden" style={{ height: "100vh" }}>
-      {/* Article Panel — always rendered, takes remaining space */}
-      <div className="min-w-0 flex-1 overflow-hidden">
-        <ArticlePanel
-          html={articleHtml}
-          title={articleTitle}
-          verificationResults={articleVerificationResults}
-          highlightedCitation={highlightedCitation}
-        />
+    <main className="flex flex-col overflow-hidden bg-[#fbfbfd]" style={{ height: "100vh" }}>
+      {/* Top Header Bar */}
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white/80 px-6 backdrop-blur-md">
+        <div className="flex flex-1 items-center gap-6">
+          <Link href="/" className="text-xl font-semibold tracking-tight text-[#1d1d1f]">
+            Wiki<span className="text-blue-500">Check</span>
+          </Link>
+          <div className="w-full max-w-lg">
+            <SearchBar variant="compact" />
+          </div>
+        </div>
+
+        {mode === "article" && (
+          <div className="flex items-center gap-3">
+            {citations.length > 0 && (
+              <span className="mr-2 text-xs font-medium text-gray-400">
+                {citations.length} verifiable
+              </span>
+            )}
+            <button
+              onClick={handleSpecificCheck}
+              disabled={citations.length === 0}
+              className="rounded-full bg-gray-100 px-4 py-1.5 text-sm font-medium text-[#1d1d1f] transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Single citation check
+            </button>
+            <button
+              onClick={handleFullCheck}
+              disabled={citations.length === 0}
+              className="rounded-full bg-blue-500 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Full citations check
+            </button>
+          </div>
+        )}
+      </header>
+
+      {/* Main Content Area */}
+      <div className="flex min-h-0 flex-1">
+        {/* Article Panel */}
+        <div className="min-w-0 flex-1 overflow-hidden bg-white shadow-sm">
+          <ArticlePanel
+            html={articleHtml}
+            title={articleTitle}
+            verificationResults={articleVerificationResults}
+            highlightedCitation={highlightedCitation}
+          />
+        </div>
+
+        {/* Slide-over panel for picking or verifying */}
+        {(mode === "picking" || mode === "verifying") && (
+          <div className="w-1/2 shrink-0 overflow-hidden border-l border-gray-200 bg-white shadow-[-4px_0_24px_rgba(0,0,0,0.02)] max-md:w-full">
+            {mode === "picking" && (
+              <CitationPicker
+                citations={citations}
+                onConfirm={handlePickerConfirm}
+                onCancel={handlePickerCancel}
+              />
+            )}
+            {mode === "verifying" && (
+              <VerificationPanel
+                citations={activeCitations}
+                results={verificationResults}
+                totalCitations={activeCitations.length}
+                isVerifying={isVerifying}
+                isPaused={isPaused}
+                onStart={() => verifyCitations(activeCitations)}
+                onStop={handleStop}
+                onContinue={handleContinue}
+                onHighlightCitation={handleHighlightCitation}
+                onBack={handleBackToArticle}
+              />
+            )}
+          </div>
+        )}
       </div>
-
-      {/* Right edge tab — always visible when in "article" mode */}
-      {mode === "article" && (
-        <div className="relative flex w-14 shrink-0 flex-col items-center justify-center gap-4 border-l border-gray-300 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-900">
-          <button
-            onClick={handleFullCheck}
-            disabled={citations.length === 0}
-            className="group relative flex h-36 w-10 flex-col items-center justify-center gap-2 rounded-md bg-blue-600 text-white shadow transition-all hover:w-11 hover:bg-blue-700 hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Verify all extracted citations"
-          >
-            <span className="text-base">🔍</span>
-            <span className="whitespace-nowrap text-[11px] font-bold tracking-wide [writing-mode:vertical-lr] rotate-180">
-              Full Check
-            </span>
-          </button>
-          <button
-            onClick={handleSpecificCheck}
-            disabled={citations.length === 0}
-            className="group relative flex h-36 w-10 flex-col items-center justify-center gap-2 rounded-md bg-purple-600 text-white shadow transition-all hover:w-11 hover:bg-purple-700 hover:shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Choose specific extracted citations to verify"
-          >
-            <span className="text-base">📋</span>
-            <span className="whitespace-nowrap text-[11px] font-bold tracking-wide [writing-mode:vertical-lr] rotate-180">
-              Specific Check
-            </span>
-          </button>
-          {citations.length > 0 && (
-            <span className="text-[10px] font-medium text-gray-400 [writing-mode:vertical-lr] rotate-180">
-              {citations.length} verifiable
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Slide-over panel for picking or verifying */}
-      {(mode === "picking" || mode === "verifying") && (
-        <div className="w-1/2 shrink-0 overflow-hidden border-l border-gray-300 dark:border-gray-600 max-md:w-full">
-          {mode === "picking" && (
-            <CitationPicker
-              citations={citations}
-              onConfirm={handlePickerConfirm}
-              onCancel={handlePickerCancel}
-            />
-          )}
-          {mode === "verifying" && (
-            <VerificationPanel
-              citations={activeCitations}
-              results={verificationResults}
-              totalCitations={activeCitations.length}
-              isVerifying={isVerifying}
-              isPaused={isPaused}
-              onStart={() => verifyCitations(activeCitations)}
-              onStop={handleStop}
-              onContinue={handleContinue}
-              onHighlightCitation={handleHighlightCitation}
-              onBack={handleBackToArticle}
-            />
-          )}
-        </div>
-      )}
     </main>
   );
 }

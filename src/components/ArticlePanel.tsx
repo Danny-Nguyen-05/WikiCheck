@@ -69,7 +69,7 @@ export default function ArticlePanel({
       </div>
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto bg-white px-6 py-4 wikipedia-content"
+        className="flex-1 overflow-y-auto overscroll-y-none bg-white px-6 py-4 wikipedia-content"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>

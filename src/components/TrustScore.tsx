@@ -24,7 +24,7 @@ export default function TrustScore({ score }: TrustScoreProps) {
             fill="none"
             stroke="currentColor"
             strokeWidth="8"
-            className="text-gray-200 dark:text-gray-700"
+            className="text-gray-200 "
           />
           <circle
             cx="50"
@@ -44,8 +44,8 @@ export default function TrustScore({ score }: TrustScoreProps) {
         </div>
       </div>
       <div>
-        <div className="text-sm font-medium text-gray-900 dark:text-white">Trust Score</div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">
+        <div className="text-sm font-medium text-gray-900 ">Trust Score</div>
+        <div className="text-xs text-gray-500 ">
           {score >= 70 ? "High confidence" : score >= 40 ? "Moderate confidence" : "Low confidence"}
         </div>
       </div>
