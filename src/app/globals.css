@@ -87,18 +87,25 @@ body, html {
 .wikipedia-content ul {
   list-style-type: disc !important;
   padding-left: 2rem !important;
+  margin-left: 1rem !important;
   margin-bottom: 1rem;
 }
 
-.wikipedia-content ol, .wikipedia-content .references {
+.wikipedia-content ol, .wikipedia-content .references, .wikipedia-content .reflist {
   list-style-type: decimal !important;
   padding-left: 2.5rem !important;
+  margin-left: 1rem !important;
   margin-bottom: 1rem;
 }
 
 .wikipedia-content li {
+  display: list-item !important;
+  list-style-position: outside !important;
   margin-bottom: 0.25rem;
-  display: list-item;
+}
+
+.wikipedia-content .references li, .wikipedia-content .reflist li {
+  list-style-type: decimal !important;
 }
 
 /* Citation highlight badges */
