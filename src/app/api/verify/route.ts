@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { verifyCitationWithEscalation } from "@/lib/gemini";
+import { verifyCitationWithEscalation, verifyCitationWithSearch } from "@/lib/gemini";
 import { Citation } from "@/lib/parser";
 
-const MARKITDOWN_SERVICE_URL = process.env.MARKITDOWN_SERVICE_URL || "http://localhost:5000";
+const MARKITDOWN_SERVICE_URL = process.env.MARKITDOWN_SERVICE_URL || "http://localhost:3001";
 const MAX_CONCURRENT = 5;
 
 interface VerifyRequest {
@@ -36,16 +36,19 @@ export async function POST(request: NextRequest) {
             batch.map(async (citation) => {
               try {
                 // Fetch source content (with caching)
-                const source = await fetchSource(citation.sourceUrl, sourceCache);
+                const source = await fetchSource(citation.sourceUrl, citation.pageRange, sourceCache);
 
                 if (!source.markdown) {
+                  // Fallback: Trigger Google Search Grounding if the scraper completely fails
+                  console.log(`[Verify API] Source unavailable for citation ${citation.number}, escalating to AI Google Search...`);
+                  const searchResult = await verifyCitationWithSearch(citation.claim);
                   return {
                     id: citation.id,
                     number: citation.number,
-                    verdict: "unverifiable" as const,
-                    confidence: 0,
-                    explanation: source.error || "Could not retrieve source",
-                    relevant_passage: null,
+                    verdict: searchResult.verdict,
+                    confidence: searchResult.confidence,
+                    explanation: searchResult.explanation || source.error || "Could not retrieve source - Search failed.",
+                    relevant_passage: searchResult.relevant_passage,
                     sourceType: source.sourceType,
                   };
                 }
@@ -108,11 +111,14 @@ export async function POST(request: NextRequest) {
 
 async function fetchSource(
   url: string,
+  pageRange: string | undefined,
   cache: Map<string, { markdown: string; sourceType: string }>
 ): Promise<{ markdown: string | null; sourceType: string; error?: string }> {
+  const cacheKey = pageRange ? `${url}#${pageRange}` : url;
+
   // Check cache first
-  if (cache.has(url)) {
-    const cached = cache.get(url)!;
+  if (cache.has(cacheKey)) {
+    const cached = cache.get(cacheKey)!;
     return { markdown: cached.markdown, sourceType: cached.sourceType };
   }
 
@@ -121,26 +127,27 @@ async function fetchSource(
     const serviceResponse = await fetch(`${MARKITDOWN_SERVICE_URL}/convert`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, page_range: pageRange }),
       signal: AbortSignal.timeout(30000),
     });
 
     const data = await serviceResponse.json();
 
     if (data.success && data.markdown) {
-      cache.set(url, { markdown: data.markdown, sourceType: data.source_type });
+      cache.set(cacheKey, { markdown: data.markdown, sourceType: data.source_type });
       return { markdown: data.markdown, sourceType: data.source_type };
     }
 
     // Fall back to basic fetch
-    return await fallbackFetchSource(url, cache);
+    return await fallbackFetchSource(url, cacheKey, cache);
   } catch {
-    return await fallbackFetchSource(url, cache);
+    return await fallbackFetchSource(url, cacheKey, cache);
   }
 }
 
 async function fallbackFetchSource(
   url: string,
+  cacheKey: string,
   cache: Map<string, { markdown: string; sourceType: string }>
 ): Promise<{ markdown: string | null; sourceType: string; error?: string }> {
   try {
@@ -176,7 +183,7 @@ async function fallbackFetchSource(
       .replace(/\s+/g, " ")
       .trim();
 
-    cache.set(url, { markdown: text, sourceType: "webpage" });
+    cache.set(cacheKey, { markdown: text, sourceType: "webpage" });
     return { markdown: text, sourceType: "webpage" };
   } catch {
     return { markdown: null, sourceType: "unavailable", error: "Failed to fetch source" };

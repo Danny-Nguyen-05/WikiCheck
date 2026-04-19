@@ -22,4 +22,5 @@ export interface Citation {
   claim: string;
   sourceUrl: string;
   refName?: string;
+  pageRange?: string;
 }

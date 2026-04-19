@@ -3,237 +3,165 @@ export interface Citation {
   number: number;
   claim: string;
   sourceUrl: string;
-  refName?: string;
+  pageRange?: string;
 }
 
 /**
- * Parse Wikipedia wikitext to extract citations with their claims and source URLs.
+ * Parse Wikipedia HTML to extract citations with their claims and source URLs.
+ * This looks directly at the rendered HTML to extract identical numbers, URLs, and text
+ * to exactly match the visual appearance of the page.
  */
-export function parseCitations(wikitext: string): Citation[] {
-  // Step 0: Mask non-prose sections (infoboxes, templates, tables, categories, etc.)
-  // We keep string length intact so ref indices still line up with the original wikitext.
-  const proseText = extractProseText(wikitext);
-
-  // Step 1: Assign Wikipedia-style visible numbers across the full page.
-  const visibleRefNumbers = buildVisibleRefNumbers(wikitext);
-
-  // Step 2: Build a map of named refs (name → full ref content) from the FULL wikitext
-  // (definitions may be in non-prose sections but referenced in prose)
-  const namedRefs = new Map<string, string>();
-  const fullRefRegex = /<ref\s+name\s*=\s*["']?([^"'\s/>]+)["']?\s*>([\s\S]*?)<\/ref>/gi;
+export function parseCitations(html: string): Citation[] {
+  // Step 1: Parse the references lists (e.g. <ol class="references">)
+  // to find mapping from "cite_note-X" to its external URL.
+  // Note: Wikipedia often HTML entity-encodes underscores in IDs like cite&#95;note instead of cite_note
+  const listItemsRegex = /<li\s+id="(cite(?:_|&#95;)note-[^"]*)"[^>]*>([\s\S]*?)<\/li>/gis;
+  const parsedSourcesById = new Map<string, { url: string; pageRange?: string }>();
   let match: RegExpExecArray | null;
 
-  while ((match = fullRefRegex.exec(wikitext)) !== null) {
-    const name = match[1].toLowerCase();
-    const content = match[2];
-    if (!namedRefs.has(name)) {
-      namedRefs.set(name, content);
+  while ((match = listItemsRegex.exec(html)) !== null) {
+    const liId = match[1].replace(/&#95;/g, "_");
+    const liContent = match[2];
+
+    // Find the first external link inside this reference item
+    // Wikipedia typically uses class="external text" or similar for external URLs
+    const linkMatch = liContent.match(/<a[^>]*class="[^"]*external[^"]*"[^>]*href="([^"]+)"/i);
+    
+    if (linkMatch) {
+      const url = linkMatch[1].replace(/&amp;/g, "&");
+      if (isValidUrl(url)) {
+        // Extract page range from liContent by temporarily stripping tags/entities
+        const tempClean = liContent.replace(/<[^>]+>/g, "").replace(/&#?\w+;/g, " ");
+        // Regex specifically hunts for common page annotations: p., pp., page, pages, pg, pgs.
+        const pageMatch = tempClean.match(/\b(?:p\.|pp\.|pages?|pgs?\.?)\s*([\d\-\u2013]+)/i);
+        let pageRange: string | undefined;
+        if (pageMatch) {
+          pageRange = pageMatch[1].replace(/\u2013/g, "-").trim();
+        }
+        
+        parsedSourcesById.set(liId, { url, pageRange });
+      }
     }
   }
 
-  // Step 3: Find all ref occurrences in the PROSE text only
-  const allRefsRegex = /<ref(?:\s+name\s*=\s*["']?([^"'\s/>]+)["']?)?\s*(?:\/?>([\s\S]*?)<\/ref>|\s*\/>)/gi;
+  // Step 2: Find all occurrences of superscript markers in the text
+  // e.g. <sup id="cite&#95;ref-1" class="reference"><a href="#cite_note-1"><span>&#91;</span>1<span>&#93;</span></a></sup>
+  const supRegex = /<sup[^>]*class="reference"[^>]*>.*?<a[^>]*href="#(cite_note-[^"]+)"[^>]*>(.*?)<\/a>.*?<\/sup>/gis;
 
   const citations: Citation[] = [];
   const seenKeys = new Set<string>();
 
-  while ((match = allRefsRegex.exec(proseText)) !== null) {
-    const refName = match[1]?.toLowerCase();
-    const refContent = match[2] || "";
-    const refStart = match.index;
-    const visibleNumber = visibleRefNumbers.get(refStart);
+  while ((match = supRegex.exec(html)) !== null) {
+    const supStart = match.index;
+    const citeNoteId = match[1];
+    
+    // Clean up the inner HTML of the link to get the exact text shown to the user
+    // This resolves issues with entities like &#91; showing up as '91'
+    const linkInnerHtml = match[2];
+    const linkText = linkInnerHtml.replace(/<[^>]+>/g, "").replace(/&#91;/g, "[").replace(/&#93;/g, "]");
+    const numMatch = linkText.match(/\d+/);
+    if (!numMatch) continue;
+    
+    const visibleNumber = parseInt(numMatch[0], 10);
+    const citeRefId = `${citeNoteId}-${visibleNumber}`; // fallback ID
 
-    if (!visibleNumber) continue;
+    const sourceInfo = parsedSourcesById.get(citeNoteId);
+    if (!sourceInfo) continue;
 
-    // Get the ref content — either inline or from the named refs map
-    let content = refContent.trim();
-    if (!content && refName && namedRefs.has(refName)) {
-      content = namedRefs.get(refName)!;
-    }
+    // Deduplicate by citation number so we strictly mirror the unique references on Wikipedia
+    const key = `ref-number-${visibleNumber}`;
+    if (seenKeys.has(key)) continue;
 
-    if (!content) continue;
-
-    // Extract URL from cite template
-    const url = extractUrlFromCiteTemplate(content);
-    if (!url) continue;
-
-    // Extract the claim: the sentence immediately before this <ref> tag
-    const claim = extractClaim(proseText, refStart);
+    const claim = extractClaimHTML(html, supStart);
     if (!claim) continue;
 
-    // Skip claims that still look like raw markup (pipe-separated fields, template params)
+    // Skip claims that don't look like sentences
     if (looksLikeMarkup(claim)) continue;
 
-    // Deduplicate
-    const key = `${url}|||${claim}`;
-    if (seenKeys.has(key)) continue;
     seenKeys.add(key);
 
     citations.push({
-      id: `citation-${visibleNumber}-${refStart}`,
+      id: citeRefId,
       number: visibleNumber,
       claim,
-      sourceUrl: url,
-      refName: refName || undefined,
+      sourceUrl: sourceInfo.url,
+      pageRange: sourceInfo.pageRange,
     });
   }
 
-  return citations;
+  // Sort citations by their visible number to match Wikipedia's reference list
+  return citations.sort((a, b) => a.number - b.number);
 }
 
 /**
- * Extract only the prose (paragraph) sections of wikitext,
- * stripping infoboxes, tables, categories, and other non-prose blocks.
+ * Extract the claim sentence that appears immediately before a <sup class="reference"> tag.
  */
-function extractProseText(wikitext: string): string {
-  let text = wikitext;
+function extractClaimHTML(html: string, index: number): string {
+  // Look back up to 800 characters to find the preceding text
+  const lookback = Math.max(0, index - 800);
+  let textBefore = html.substring(lookback, index);
 
-  // Remove nested templates like {{Infobox ...}}, {{short description ...}}, etc.
-  // Repeatedly strip innermost templates until none remain
-  let prev = "";
-  while (prev !== text) {
-    prev = text;
-    // Remove innermost templates (no nested {{ inside)
-    text = text.replace(/\{\{(?:[^{}]|\n)*?\}\}/g, preserveWhitespace);
+  // If we arbitrarily cut a tag in half, discard the broken partial tag at the start
+  const firstClose = textBefore.indexOf(">");
+  const firstOpen = textBefore.indexOf("<");
+  if (firstClose !== -1 && (firstOpen === -1 || firstClose < firstOpen)) {
+    textBefore = textBefore.substring(firstClose + 1);
   }
 
-  // Remove tables {| ... |}
-  text = text.replace(/\{\|[\s\S]*?\|\}/g, preserveWhitespace);
+  // We don't want to cross paragraph or block boundaries, so we split and take the very last block chunk
+  const blocks = textBefore.split(/<\/?(?:p|div|h[1-6]|ul|ol|li|table|tr|td|th)[^>]*>/i);
+  textBefore = blocks[blocks.length - 1];
 
-  // Remove categories [[Category:...]]
-  text = text.replace(/\[\[Category:[^\]]*\]\]/gi, preserveWhitespace);
+  // Decode common HTML entities that Wikipedia uses heavily
+  let clean = textBefore
+    .replace(/&#91;/g, "[")
+    .replace(/&#93;/g, "]")
+    .replace(/&#160;|&nbsp;/g, " ")
+    .replace(/&#8211;|&ndash;/g, "-")
+    .replace(/&#8212;|&mdash;/g, "--")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 
-  // Remove file/image links [[File:...]] and [[Image:...]]
-  text = text.replace(/\[\[(?:File|Image):[^\]]*\]\]/gi, preserveWhitespace);
+  // Remove all HTML tags to get pure display text
+  clean = clean.replace(/<[^>]+>/g, "");
 
-  // Remove __TOC__, __NOTOC__, etc.
-  text = text.replace(/__[A-Z]+__/g, preserveWhitespace);
+  // Remove exiting bracketed inline citations like [1] or [note 1]
+  clean = clean.replace(/\[(?:note\s*)?\d+[a-z]*\]/gi, "");
+  
+  // Clean up remaining generic entities
+  clean = clean.replace(/&#?\w+;/g, "");
 
-  // Remove lines that start with | or ! (table rows that survived)
-  text = text.replace(/^\s*[|!].*$/gm, preserveWhitespace);
+  // Clean up whitespace
+  clean = clean.replace(/\s+/g, " ").trim();
 
-  return text;
-}
-
-function buildVisibleRefNumbers(wikitext: string): Map<number, number> {
-  const refsByIndex = new Map<number, number>();
-  const namedRefNumbers = new Map<string, number>();
-  const allRefsRegex = /<ref(?:\s+name\s*=\s*["']?([^"'\s/>]+)["']?)?\s*(?:\/?>([\s\S]*?)<\/ref>|\s*\/>)/gi;
-
-  let match: RegExpExecArray | null;
-  let nextVisibleNumber = 1;
-
-  while ((match = allRefsRegex.exec(wikitext)) !== null) {
-    const refName = match[1]?.toLowerCase();
-
-    if (refName) {
-      const existing = namedRefNumbers.get(refName);
-      if (existing) {
-        refsByIndex.set(match.index, existing);
-        continue;
-      }
-
-      namedRefNumbers.set(refName, nextVisibleNumber);
-    }
-
-    refsByIndex.set(match.index, nextVisibleNumber);
-    nextVisibleNumber += 1;
-  }
-
-  return refsByIndex;
-}
-
-function preserveWhitespace(match: string): string {
-  return match.replace(/[^\n]/g, " ");
-}
-
-/**
- * Check if a claim string still looks like raw wikitext markup rather than prose.
- */
-function looksLikeMarkup(claim: string): boolean {
-  // Contains pipe-separated fields (infobox params like "| children = 3")
-  if ((claim.match(/\|/g) || []).length >= 2) return true;
-  // Starts with a pipe
-  if (/^\s*\|/.test(claim)) return true;
-  // Contains {{ or }} (unresolved templates)
-  if (/\{\{|\}\}/.test(claim)) return true;
-  // Contains [[ or ]] (unresolved wikilinks — more than 1)
-  if ((claim.match(/\[\[/g) || []).length >= 2) return true;
-  // Too short to be a real claim
-  if (claim.length < 15) return true;
-  // Mostly non-alphanumeric (markup noise)
-  const alphaRatio = (claim.match(/[a-zA-Z]/g) || []).length / claim.length;
-  if (alphaRatio < 0.4) return true;
-
-  return false;
-}
-
-/**
- * Extract URL from a Wikipedia cite template.
- */
-function extractUrlFromCiteTemplate(content: string): string | null {
-  // Try |url= parameter first (most common)
-  const urlParamMatch = content.match(/\|\s*url\s*=\s*([^\s|}\]]+)/i);
-  if (urlParamMatch) {
-    let url = urlParamMatch[1].trim();
-    url = url.replace(/[{}[\]]+$/, "");
-    if (isValidUrl(url)) return url;
-  }
-
-  // Try bare URL in the ref content
-  const bareUrlMatch = content.match(/(https?:\/\/[^\s|}\]<>]+)/i);
-  if (bareUrlMatch) {
-    let url = bareUrlMatch[1].trim();
-    url = url.replace(/[{}[\]]+$/, "");
-    if (isValidUrl(url)) return url;
-  }
-
-  return null;
-}
-
-/**
- * Extract the claim sentence that appears immediately before a <ref> tag.
- */
-function extractClaim(wikitext: string, refIndex: number): string {
-  // Get text before the ref tag (up to 500 chars back)
-  const lookback = Math.max(0, refIndex - 500);
-  const textBefore = wikitext.substring(lookback, refIndex);
-
-  // Remove wikitext markup
-  const clean = textBefore
-    // Remove any remaining templates
-    .replace(/\{\{[^{}]*\}\}/g, "")
-    // Remove wiki links, keep display text
-    .replace(/\[\[(?:[^|\]]*\|)?([^\]]*)\]\]/g, "$1")
-    // Remove external links, keep display text
-    .replace(/\[https?:\/\/[^\s\]]+ ([^\]]+)\]/g, "$1")
-    .replace(/\[https?:\/\/[^\]]+\]/g, "")
-    // Remove HTML tags
-    .replace(/<[^>]+>/g, "")
-    // Remove ref tags that might be inline
-    .replace(/<ref[^>]*\/>/g, "")
-    // Remove section headings (== Title ==)
-    .replace(/^=+\s*.*?\s*=+$/gm, "")
-    // Remove bold/italic markup
-    .replace(/'{2,5}/g, "")
-    // Remove pipe characters (table/template leftovers)
-    .replace(/\|/g, " ")
-    // Clean up whitespace
-    .replace(/\s+/g, " ")
-    .trim();
-
-  // Extract the last sentence
+  // Extract the last sentence using period/exclamation/question marks as delimiters
   const sentences = clean.split(/(?<=[.!?])\s+/);
   const lastSentence = sentences[sentences.length - 1]?.trim();
 
+  // Validate the extracted sentence
   if (!lastSentence || lastSentence.length < 15) {
-    // If no good sentence, take last 200 chars as fallback
+    // Fallback: just give the last chunks of characters if punctuation parsing fails
     const fallback = clean.slice(-200).trim();
     if (fallback.length < 15) return "";
     return fallback;
   }
 
   return lastSentence;
+}
+
+/**
+ * Validation to skip claims that are just stray formatting or math formulas.
+ */
+function looksLikeMarkup(claim: string): boolean {
+  // Contains braces
+  if (/\{\{|\}\}/.test(claim)) return true;
+  // Almost entirely non-alphabetic
+  const alphaRatio = (claim.match(/[a-zA-Z]/g) || []).length / claim.length;
+  if (alphaRatio < 0.4) return true;
+
+  return false;
 }
 
 function isValidUrl(url: string): boolean {

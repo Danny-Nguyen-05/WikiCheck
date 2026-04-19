@@ -12,13 +12,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Fetch HTML and wikitext in parallel
-    const [htmlResponse, wikitextResponse] = await Promise.all([
-      fetchArticleHtml(title),
-      fetchArticleWikitext(title),
-    ]);
+    // Fetch HTML only, wikitext is no longer needed
+    const htmlResponse = await fetchArticleHtml(title);
 
-    if (!htmlResponse.ok || !wikitextResponse.ok) {
+    if (!htmlResponse.ok) {
       return NextResponse.json(
         { error: "Article not found" },
         { status: 404 }
@@ -26,13 +23,10 @@ export async function GET(request: NextRequest) {
     }
 
     const htmlData = await htmlResponse.json();
-    const wikitextData = await wikitextResponse.json();
-
     const html = htmlData?.parse?.text?.["*"] || "";
-    const wikitext = wikitextData?.parse?.wikitext?.["*"] || "";
 
-    // Parse citations from wikitext
-    const citations = parseCitations(wikitext);
+    // Parse citations from rendered HTML
+    const citations = parseCitations(html);
 
     return NextResponse.json({
       title: htmlData?.parse?.title || title,
@@ -61,16 +55,4 @@ function fetchArticleHtml(title: string) {
   });
 }
 
-function fetchArticleWikitext(title: string) {
-  const url = new URL("https://en.wikipedia.org/w/api.php");
-  url.searchParams.set("action", "parse");
-  url.searchParams.set("page", title);
-  url.searchParams.set("prop", "wikitext");
-  url.searchParams.set("format", "json");
-  url.searchParams.set("origin", "*");
 
-  return fetch(url.toString(), {
-    headers: { "User-Agent": "WikiCheck/1.0 (Citation Verification Tool)" },
-    signal: AbortSignal.timeout(15000),
-  });
-}
