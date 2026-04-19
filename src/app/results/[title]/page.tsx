@@ -28,7 +28,33 @@ export default function ResultsPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [mode, setMode] = useState<Mode>("article");
   const [error, setError] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(50);
+  const [isDragging, setIsDragging] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Calculate right panel width percentage based on mouse position
+      const newWidth = ((document.body.clientWidth - e.clientX) / document.body.clientWidth) * 100;
+      // Constrain panel width between 20% and 80%
+      if (newWidth > 20 && newWidth < 80) setPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = () => setIsDragging(false);
+
+    // Disable text selection globally while dragging to prevent janky UX
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    
+    return () => {
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
 
   const articleVerificationResults = useMemo(() => {
     const byNumber = new Map<number, CitationResult>();
@@ -256,9 +282,29 @@ export default function ResultsPage() {
           />
         </div>
 
+        {/* Resizer Handle */}
+        {(mode === "picking" || mode === "verifying") && (
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            className="group relative z-10 w-1 cursor-col-resize bg-gray-200 transition-colors hover:bg-blue-400 active:bg-blue-500 max-md:hidden"
+          >
+            {/* Visual grabber */}
+            <div className="absolute top-1/2 left-1/2 h-8 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gray-400 opacity-0 transition-opacity group-hover:opacity-100 group-active:opacity-100" />
+            
+            {/* Wider invisible hit area for easier grabbing */}
+            <div className="absolute top-0 bottom-0 left-1/2 w-4 -translate-x-1/2 bg-transparent" />
+          </div>
+        )}
+
         {/* Slide-over panel for picking or verifying */}
         {(mode === "picking" || mode === "verifying") && (
-          <div className="w-1/2 shrink-0 overflow-hidden border-l border-gray-200 bg-white shadow-[-4px_0_24px_rgba(0,0,0,0.02)] max-md:w-full">
+          <div 
+            style={{ width: `${panelWidth}%` }}
+            className="shrink-0 overflow-hidden bg-white shadow-[-4px_0_24px_rgba(0,0,0,0.02)] max-md:!w-full"
+          >
             {mode === "picking" && (
               <CitationPicker
                 citations={citations}

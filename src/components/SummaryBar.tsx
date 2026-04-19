@@ -14,7 +14,7 @@ const verdictConfig: Record<Verdict, { emoji: string; label: string; color: stri
   supported: { emoji: "✅", label: "Supported", color: "text-green-600 " },
   partial: { emoji: "⚠️", label: "Partial", color: "text-yellow-600 " },
   unsupported: { emoji: "❌", label: "Unsupported", color: "text-red-600 " },
-  unverifiable: { emoji: "🔒", label: "Unverifiable", color: "text-gray-500 " },
+  unverifiable: { emoji: "❓", label: "Unverifiable", color: "text-gray-500 " },
 };
 
 export default function SummaryBar({

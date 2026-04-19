@@ -13,7 +13,7 @@ const filters: { key: Verdict | "all"; label: string }[] = [
   { key: "supported", label: "✅ Supported" },
   { key: "partial", label: "⚠️ Partial" },
   { key: "unsupported", label: "❌ Unsupported" },
-  { key: "unverifiable", label: "🔒 Unverifiable" },
+  { key: "unverifiable", label: "❓ Unverifiable" },
 ];
 
 export default function FilterBar({ active, onChange, counts }: FilterBarProps) {

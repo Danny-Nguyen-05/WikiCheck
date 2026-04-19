@@ -39,7 +39,7 @@ const verdictStyles: Record<
     border: "border-gray-200 ",
     badge: "bg-gray-100 text-gray-800  ",
     label: "Unverifiable",
-    emoji: "🔒",
+    emoji: "❓",
   },
 };
 
