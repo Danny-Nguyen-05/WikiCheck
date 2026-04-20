@@ -20,6 +20,8 @@ interface VerificationPanelProps {
   onContinue: () => void;
   onHighlightCitation: (number: number) => void;
   onBack?: () => void;
+  /** Passed to CitationCard so "Fix This" links back to /draft with article context */
+  articleTitle?: string;
 }
 
 export default function VerificationPanel({
@@ -33,6 +35,7 @@ export default function VerificationPanel({
   onContinue,
   onHighlightCitation,
   onBack,
+  articleTitle,
 }: VerificationPanelProps) {
   const [filter, setFilter] = useState<Verdict | "all">("all");
 
@@ -145,6 +148,7 @@ export default function VerificationPanel({
                   claim={citation.claim}
                   sourceUrl={citation.sourceUrl}
                   onHighlight={onHighlightCitation}
+                  articleTitle={articleTitle}
                 />
               );
             }

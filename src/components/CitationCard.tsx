@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { CitationResult, Verdict } from "@/lib/types";
 
 interface CitationCardProps {
@@ -7,6 +8,8 @@ interface CitationCardProps {
   claim: string;
   sourceUrl: string;
   onHighlight: (number: number) => void;
+  /** Article title — used to build the "Fix This" link back to /draft */
+  articleTitle?: string;
 }
 
 const verdictStyles: Record<
@@ -107,8 +110,16 @@ export default function CitationCard({
   claim,
   sourceUrl,
   onHighlight,
+  articleTitle,
 }: CitationCardProps) {
   const style = verdictStyles[result.verdict];
+  const canFix = result.verdict === "unsupported" || result.verdict === "unverifiable";
+
+  const fixHref = `/draft?${new URLSearchParams({
+    claim,
+    url: sourceUrl,
+    ...(articleTitle ? { article: articleTitle } : {}),
+  }).toString()}`;
 
   return (
     <div className={`rounded-lg border p-4 transition-all ${style.bg} ${style.border}`}>
@@ -162,7 +173,7 @@ export default function CitationCard({
       </p>
 
       {/* Actions */}
-      <div className="mt-3 flex gap-3">
+      <div className="mt-3 flex flex-wrap gap-3">
         <a
           href={sourceUrl}
           target="_blank"
@@ -177,6 +188,14 @@ export default function CitationCard({
         >
           Highlight in Article
         </button>
+        {canFix && (
+          <Link
+            href={fixHref}
+            className="ml-auto text-xs font-semibold text-orange-600 hover:text-orange-700"
+          >
+            Fix This →
+          </Link>
+        )}
       </div>
     </div>
   );

@@ -31,6 +31,8 @@ export default function ResultsPage() {
   const [panelWidth, setPanelWidth] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // sessionStorage key for this article — used to persist state across navigation
+  const STATE_KEY = `wikicheck-${title}`;
 
   useEffect(() => {
     if (!isDragging) return;
@@ -64,8 +66,32 @@ export default function ResultsPage() {
     return byNumber;
   }, [verificationResults]);
 
-  // Fetch article
+  // ── Fetch article (or restore from sessionStorage cache) ───────────────────
   useEffect(() => {
+    // Try restoring a full snapshot first — this is what makes "Back" work
+    // without losing verification results.
+    const saved = sessionStorage.getItem(STATE_KEY);
+    if (saved) {
+      try {
+        const s = JSON.parse(saved);
+        if (s.articleHtml) {
+          setArticleHtml(s.articleHtml);
+          setArticleTitle(s.articleTitle ?? title);
+          setCitations(s.citations ?? []);
+          setActiveCitations(s.activeCitations ?? []);
+          setVerificationResults(new Map(s.verificationResults ?? []));
+          // Restore mode — if verification was running when they left, mark as
+          // paused so they can resume (verification can't run in the background).
+          const savedMode: Mode = s.mode ?? "article";
+          setMode(savedMode);
+          if (savedMode === "verifying") setIsPaused(true);
+          setIsLoadingArticle(false);
+          return; // Skip network fetch — everything already restored
+        }
+      } catch { /* corrupted entry — fall through to fetch */ }
+    }
+
+    // No cache: fetch from Wikipedia API
     async function fetchArticle() {
       setIsLoadingArticle(true);
       setError(null);
@@ -86,7 +112,26 @@ export default function ResultsPage() {
       }
     }
     fetchArticle();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title]);
+
+  // ── Persist state to sessionStorage on every meaningful change ──────────────
+  // Runs after every render where the article is loaded. Serializes the Map as
+  // an array of [key, value] pairs (JSON doesn't support Maps natively).
+  useEffect(() => {
+    if (!articleHtml) return; // Nothing to save yet
+    const snapshot = {
+      mode,
+      articleHtml,
+      articleTitle,
+      citations,
+      activeCitations,
+      verificationResults: Array.from(verificationResults.entries()),
+    };
+    try {
+      sessionStorage.setItem(STATE_KEY, JSON.stringify(snapshot));
+    } catch { /* QuotaExceededError — storage full, skip silently */ }
+  }, [STATE_KEY, mode, articleHtml, articleTitle, citations, activeCitations, verificationResults]);
 
   // Verify a set of citations (used for both initial run and resume)
   const verifyCitations = useCallback(async (toVerify: Citation[]) => {
@@ -266,6 +311,12 @@ export default function ResultsPage() {
             >
               Full citations check
             </button>
+            <Link
+              href={`/draft?article=${encodeURIComponent(articleTitle)}`}
+              className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
+            >
+              ✏️ Check My Edit
+            </Link>
           </div>
         )}
       </header>
@@ -324,6 +375,7 @@ export default function ResultsPage() {
                 onContinue={handleContinue}
                 onHighlightCitation={handleHighlightCitation}
                 onBack={handleBackToArticle}
+                articleTitle={articleTitle}
               />
             )}
           </div>
