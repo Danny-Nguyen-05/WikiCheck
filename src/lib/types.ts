@@ -26,4 +26,7 @@ export interface Citation {
   sourceUrl: string;
   refName?: string;
   pageRange?: string;
+  /** Full sentence text captured at parse time — used for exact text search in the article.
+   *  More reliable than the `claim` field which is trimmed to the last sentence only. */
+  sourceSentence?: string;
 }

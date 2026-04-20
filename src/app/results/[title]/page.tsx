@@ -66,6 +66,15 @@ export default function ResultsPage() {
     return byNumber;
   }, [verificationResults]);
 
+  // Build sourceSentence map for ArticlePanel's direct text search
+  const sourceSentencesMap = useMemo(() => {
+    const m = new Map<number, string>();
+    citations.forEach((c) => {
+      if (c.sourceSentence) m.set(c.number, c.sourceSentence);
+    });
+    return m;
+  }, [citations]);
+
   // ── Fetch article (or restore from sessionStorage cache) ───────────────────
   useEffect(() => {
     // Try restoring a full snapshot first — this is what makes "Back" work
@@ -330,6 +339,7 @@ export default function ResultsPage() {
             title={articleTitle}
             verificationResults={articleVerificationResults}
             highlightedCitation={highlightedCitation}
+            sourceSentences={sourceSentencesMap}
           />
         </div>
 

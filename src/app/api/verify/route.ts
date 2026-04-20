@@ -29,27 +29,23 @@ export async function POST(request: NextRequest) {
         // Cache source content — never fetch the same URL twice
         const sourceCache = new Map<string, { markdown: string; sourceType: string }>();
 
-        // Process citations in batches for controlled parallelism
+        // Process citations in batches of MAX_CONCURRENT.
+        // Each promise streams its result the instant it resolves —
+        // no waiting for the other 4 in the batch.
         for (let i = 0; i < citations.length; i += MAX_CONCURRENT) {
           const batch = citations.slice(i, i + MAX_CONCURRENT);
 
-          const results = await Promise.all(
+          await Promise.all(
             batch.map(async (citation) => {
+              let result;
               try {
-                // Fetch source content (with caching)
                 const source = await fetchSource(citation.sourceUrl, citation.pageRange, sourceCache);
 
                 if (!source.markdown) {
-                  // ── Fallback: try Gemini URL Context (reads the same URL directly) ──
-                  // If this also fails → unverifiable.
-                  // NOTE: We do NOT fall back to Google Search — that would verify
-                  // the claim from a *different* source, which defeats the entire
-                  // purpose of citation verification. If we can't read the cited
-                  // source, the verdict must be "unverifiable".
                   console.log(`[Verify] Python service couldn't fetch [${citation.number}], trying Gemini URL context...`);
                   try {
                     const urlResult = await verifyCitationWithUrlContext(citation.claim, citation.sourceUrl);
-                    return {
+                    result = {
                       id: citation.id,
                       number: citation.number,
                       verdict: urlResult.verdict,
@@ -59,37 +55,34 @@ export async function POST(request: NextRequest) {
                       sourceType: "url_context",
                     };
                   } catch {
-                    // Both fetchers failed — we cannot read this source at all
                     console.log(`[Verify] URL context also failed for [${citation.number}] — marking unverifiable`);
-                    return {
+                    result = {
                       id: citation.id,
                       number: citation.number,
-                      verdict: "unverifiable",
+                      verdict: "unverifiable" as const,
                       confidence: 0,
                       explanation: source.error || "Could not access the cited source — the link may be paywalled, broken, or a non-readable format.",
                       relevant_passage: null,
                       sourceType: "unavailable",
                     };
                   }
+                } else {
+                  const geminiResult = await verifyCitationWithEscalation(
+                    citation.claim,
+                    source.markdown
+                  );
+                  result = {
+                    id: citation.id,
+                    number: citation.number,
+                    verdict: geminiResult.verdict,
+                    confidence: geminiResult.confidence,
+                    explanation: geminiResult.explanation,
+                    relevant_passage: geminiResult.relevant_passage,
+                    sourceType: source.sourceType,
+                  };
                 }
-
-                // Verify with Gemini
-                const result = await verifyCitationWithEscalation(
-                  citation.claim,
-                  source.markdown
-                );
-
-                return {
-                  id: citation.id,
-                  number: citation.number,
-                  verdict: result.verdict,
-                  confidence: result.confidence,
-                  explanation: result.explanation,
-                  relevant_passage: result.relevant_passage,
-                  sourceType: source.sourceType,
-                };
               } catch {
-                return {
+                result = {
                   id: citation.id,
                   number: citation.number,
                   verdict: "unverifiable" as const,
@@ -99,16 +92,13 @@ export async function POST(request: NextRequest) {
                   sourceType: "unknown",
                 };
               }
+
+              // ⚡ Stream immediately — don't wait for the rest of the batch
+              controller.enqueue(encoder.encode(JSON.stringify(result) + "\n"));
             })
           );
-
-          // Stream each result as a newline-delimited JSON line
-          for (const value of results) {
-            controller.enqueue(
-              encoder.encode(JSON.stringify(value) + "\n")
-            );
-          }
         }
+
 
         controller.close();
       },

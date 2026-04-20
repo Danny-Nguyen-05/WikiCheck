@@ -2,6 +2,7 @@ export interface Citation {
   id: string;
   number: number;
   claim: string;
+  sourceSentence?: string;
   sourceUrl: string;
   pageRange?: string;
 }
@@ -72,8 +73,9 @@ export function parseCitations(html: string): Citation[] {
     const key = `ref-number-${visibleNumber}`;
     if (seenKeys.has(key)) continue;
 
-    const claim = extractClaimHTML(html, supStart);
-    if (!claim) continue;
+    const extracted = extractClaimHTML(html, supStart);
+    if (!extracted) continue;
+    const { claim, sourceSentence } = extracted;
 
     // Skip claims that don't look like sentences
     if (looksLikeMarkup(claim)) continue;
@@ -84,6 +86,7 @@ export function parseCitations(html: string): Citation[] {
       id: citeRefId,
       number: visibleNumber,
       claim,
+      sourceSentence,
       sourceUrl: sourceInfo.url,
       pageRange: sourceInfo.pageRange,
     });
@@ -94,9 +97,11 @@ export function parseCitations(html: string): Citation[] {
 }
 
 /**
- * Extract the claim sentence that appears immediately before a <sup class="reference"> tag.
+ * Extract the claim sentence and full source sentence that appear immediately
+ * before a <sup class="reference"> tag.
+ * Returns { claim: lastSentenceOnly, sourceSentence: fullCleanedBlock } or null.
  */
-function extractClaimHTML(html: string, index: number): string {
+function extractClaimHTML(html: string, index: number): { claim: string; sourceSentence: string } | null {
   // Look back up to 800 characters to find the preceding text
   const lookback = Math.max(0, index - 800);
   let textBefore = html.substring(lookback, index);
@@ -136,6 +141,10 @@ function extractClaimHTML(html: string, index: number): string {
   // Clean up whitespace
   clean = clean.replace(/\s+/g, " ").trim();
 
+  // `clean` is now the full block text — use it as sourceSentence.
+  // Then split into sentences and take the last one as the claim.
+  const sourceSentence = clean;
+
   // Extract the last sentence using period/exclamation/question marks as delimiters
   const sentences = clean.split(/(?<=[.!?])\s+/);
   const lastSentence = sentences[sentences.length - 1]?.trim();
@@ -144,11 +153,11 @@ function extractClaimHTML(html: string, index: number): string {
   if (!lastSentence || lastSentence.length < 15) {
     // Fallback: just give the last chunks of characters if punctuation parsing fails
     const fallback = clean.slice(-200).trim();
-    if (fallback.length < 15) return "";
-    return fallback;
+    if (fallback.length < 15) return null;
+    return { claim: fallback, sourceSentence };
   }
 
-  return lastSentence;
+  return { claim: lastSentence, sourceSentence };
 }
 
 /**

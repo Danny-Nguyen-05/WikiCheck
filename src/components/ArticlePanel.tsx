@@ -8,6 +8,9 @@ interface ArticlePanelProps {
   title: string;
   verificationResults: Map<number, CitationResult>;
   highlightedCitation: number | null;
+  /** Maps citation number → sourceSentence for direct text search.
+   *  Built from the parsed citations array in the parent page. */
+  sourceSentences?: Map<number, string>;
 }
 
 const verdictColorClass: Record<Verdict, string> = {
@@ -22,6 +25,7 @@ export default function ArticlePanel({
   title,
   verificationResults,
   highlightedCitation,
+  sourceSentences,
 }: ArticlePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -149,13 +153,55 @@ export default function ArticlePanel({
       cumText += tn.textContent ?? "";
     }
 
-    // Find the start of the current sentence: character AFTER the last `. ` / `! ` / `? `
-    const lastBoundary = Math.max(
-      cumText.lastIndexOf(". "),
-      cumText.lastIndexOf("! "),
-      cumText.lastIndexOf("? ")
-    );
-    const sentenceCharStart = lastBoundary >= 0 ? lastBoundary + 2 : 0;
+    // ── Determine sentence start ──────────────────────────────────────────────
+    // Strategy 1: direct text search using sourceSentence stored at parse time.
+    // Take the first 60 chars as the search key (long enough to be unique,
+    // short enough to avoid encoding edge cases mid-sentence).
+    let sentenceCharStart = 0;
+    let foundViaSearch = false;
+
+    const sourceSentence = sourceSentences?.get(highlightedCitation);
+    if (sourceSentence && sourceSentence.length >= 10) {
+      // Normalize both strings the same way before comparing:
+      // lowercase + collapse whitespace + replace common special chars.
+      const normalize = (s: string) =>
+        s.toLowerCase()
+          .replace(/[\u2013\u2014]/g, "-")  // en/em-dash → hyphen
+          .replace(/[\u2018\u2019]/g, "'") // curly single quotes
+          .replace(/[\u201c\u201d]/g, '"') // curly double quotes
+          .replace(/\u00a0/g, " ")         // non-breaking space
+          .replace(/\s+/g, " ").trim();
+
+      const normCumText = normalize(cumText);
+      // Use first 60 chars of sourceSentence as the search key
+      const searchKey = normalize(sourceSentence).slice(0, 60);
+
+      if (searchKey.length >= 10) {
+        const idx = normCumText.indexOf(searchKey);
+        if (idx !== -1) {
+          // idx is a position in the NORMALIZED string. Because our normalization
+          // is mostly 1:1 char replacements (no length changes except \s+ collapse),
+          // we use it as an approximate offset and then scan nearby in the original
+          // cumText to land on the exact start of the first word.
+          // Find the start of the first word at or after idx in original cumText:
+          let approx = Math.min(idx, cumText.length - 1);
+          // Skip any leading whitespace
+          while (approx < cumText.length && /\s/.test(cumText[approx])) approx++;
+          sentenceCharStart = approx;
+          foundViaSearch = true;
+        }
+      }
+    }
+
+    // Strategy 2 (fallback): find last sentence-ending punctuation before the sup.
+    if (!foundViaSearch) {
+      const lastBoundary = Math.max(
+        cumText.lastIndexOf(". "),
+        cumText.lastIndexOf("! "),
+        cumText.lastIndexOf("? ")
+      );
+      sentenceCharStart = lastBoundary >= 0 ? lastBoundary + 2 : 0;
+    }
 
     // Locate which text node contains sentenceCharStart and compute the offset within it
     let startNode: Text | null = null;
