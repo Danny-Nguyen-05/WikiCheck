@@ -214,3 +214,91 @@ Verdict guidelines:
     };
   }
 }
+
+/**
+ * Verify by asking Gemini to read the exact citation URL directly using its urlContext tool.
+ * This is more accurate than Google Search because it reads the specific cited source,
+ * not just whatever Google finds.
+ *
+ * Works well for: public webpages, open-access articles, government sites.
+ * May fail for:   PDFs (handled earlier by Python service), paywalled content.
+ */
+export async function verifyCitationWithUrlContext(
+  claim: string,
+  sourceUrl: string,
+  modelName: string = "gemini-3.1-pro-preview"
+): Promise<VerificationResult> {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not configured");
+  }
+
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+  const genModel = genAI.getGenerativeModel({
+    model: modelName,
+    tools: [
+      {
+        // @ts-ignore - urlContext tool lets Gemini fetch and read the URL directly
+        urlContext: {}
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+    },
+  });
+
+  const sysPrompt = `You are a Wikipedia citation verifier. You will be given a URL and a claim.
+Fetch and read the content at that URL, then determine whether the source supports the Wikipedia claim.
+
+Respond ONLY in this exact JSON format:
+{
+  "verdict": "supported" | "partial" | "unsupported" | "unverifiable",
+  "confidence": 0-100,
+  "explanation": "one concise sentence explaining what you found at the URL",
+  "relevant_passage": "exact quote from the page content or null"
+}
+
+Verdict guidelines:
+- "supported": The page clearly and directly supports the claim.
+- "partial": The page partially supports the claim but with differences in details, numbers, or scope.
+- "unsupported": The page contradicts the claim or does not support it.
+- "unverifiable": You could not access the page or it did not contain enough information.`;
+
+  const prompt = `Please fetch and read this URL: ${sourceUrl}
+
+Then verify the following Wikipedia claim against the content you find:
+"${claim}"`;
+
+  try {
+    const result = await genModel.generateContent([
+      { text: sysPrompt },
+      { text: prompt },
+    ]);
+
+    const responseText = result.response.text();
+    const parsed = JSON.parse(responseText);
+
+    // If Gemini reports it couldn't access the URL, treat as failure so
+    // the caller can escalate to Google Search grounding.
+    if (
+      parsed.verdict === "unverifiable" &&
+      typeof parsed.explanation === "string" &&
+      (parsed.explanation.toLowerCase().includes("could not access") ||
+        parsed.explanation.toLowerCase().includes("unable to fetch") ||
+        parsed.explanation.toLowerCase().includes("cannot access"))
+    ) {
+      throw new Error("Gemini could not access the URL");
+    }
+
+    return {
+      verdict: parsed.verdict || "unverifiable",
+      confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
+      explanation: parsed.explanation || "No explanation provided",
+      relevant_passage: parsed.relevant_passage || null,
+    };
+  } catch {
+    // Propagate failure so the caller can try the next fallback
+    throw new Error("URL context verification failed");
+  }
+}

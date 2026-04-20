@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { verifyCitationWithEscalation, verifyCitationWithSearch } from "@/lib/gemini";
+import { verifyCitationWithEscalation, verifyCitationWithUrlContext } from "@/lib/gemini";
+
 import { Citation } from "@/lib/parser";
 
 const MARKITDOWN_SERVICE_URL = process.env.MARKITDOWN_SERVICE_URL || "http://localhost:3001";
@@ -39,18 +40,37 @@ export async function POST(request: NextRequest) {
                 const source = await fetchSource(citation.sourceUrl, citation.pageRange, sourceCache);
 
                 if (!source.markdown) {
-                  // Fallback: Trigger Google Search Grounding if the scraper completely fails
-                  console.log(`[Verify API] Source unavailable for citation ${citation.number}, escalating to AI Google Search...`);
-                  const searchResult = await verifyCitationWithSearch(citation.claim);
-                  return {
-                    id: citation.id,
-                    number: citation.number,
-                    verdict: searchResult.verdict,
-                    confidence: searchResult.confidence,
-                    explanation: searchResult.explanation || source.error || "Could not retrieve source - Search failed.",
-                    relevant_passage: searchResult.relevant_passage,
-                    sourceType: source.sourceType,
-                  };
+                  // ── Fallback: try Gemini URL Context (reads the same URL directly) ──
+                  // If this also fails → unverifiable.
+                  // NOTE: We do NOT fall back to Google Search — that would verify
+                  // the claim from a *different* source, which defeats the entire
+                  // purpose of citation verification. If we can't read the cited
+                  // source, the verdict must be "unverifiable".
+                  console.log(`[Verify] Python service couldn't fetch [${citation.number}], trying Gemini URL context...`);
+                  try {
+                    const urlResult = await verifyCitationWithUrlContext(citation.claim, citation.sourceUrl);
+                    return {
+                      id: citation.id,
+                      number: citation.number,
+                      verdict: urlResult.verdict,
+                      confidence: urlResult.confidence,
+                      explanation: urlResult.explanation,
+                      relevant_passage: urlResult.relevant_passage,
+                      sourceType: "url_context",
+                    };
+                  } catch {
+                    // Both fetchers failed — we cannot read this source at all
+                    console.log(`[Verify] URL context also failed for [${citation.number}] — marking unverifiable`);
+                    return {
+                      id: citation.id,
+                      number: citation.number,
+                      verdict: "unverifiable",
+                      confidence: 0,
+                      explanation: source.error || "Could not access the cited source — the link may be paywalled, broken, or a non-readable format.",
+                      relevant_passage: null,
+                      sourceType: "unavailable",
+                    };
+                  }
                 }
 
                 // Verify with Gemini

@@ -6,28 +6,50 @@ import type { SearchResult } from "@/lib/types";
 
 interface SearchBarProps {
   variant?: "default" | "compact";
+  /** Pre-fills the input (used on the search results page) */
+  initialQuery?: string;
 }
 
-export default function SearchBar({ variant = "default" }: SearchBarProps) {
-  const [query, setQuery] = useState("");
+export default function SearchBar({ variant = "default", initialQuery = "" }: SearchBarProps) {
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // When true the next query state change came from props (not user typing)
+  // and must NOT trigger a fetch or open the dropdown.
+  const skipNextFetch = useRef(false);
   const router = useRouter();
 
+  // Sync initialQuery from parent WITHOUT triggering a search or opening dropdown
+  useEffect(() => {
+    skipNextFetch.current = true;
+    setQuery(initialQuery);
+    setIsOpen(false);
+    setResults([]);
+  }, [initialQuery]);
+
+  // Close when clicking outside the component
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setIsFocused(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Debounced search — skipped when the query change came from props
   useEffect(() => {
+    if (skipNextFetch.current) {
+      skipNextFetch.current = false;
+      return;
+    }
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (query.trim().length < 2) {
@@ -42,7 +64,8 @@ export default function SearchBar({ variant = "default" }: SearchBarProps) {
         const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
         const data = await res.json();
         setResults(data.results || []);
-        setIsOpen(true);
+        // Only open if the user still has the input focused
+        if (isFocused) setIsOpen(true);
       } catch {
         setResults([]);
       } finally {
@@ -53,21 +76,41 @@ export default function SearchBar({ variant = "default" }: SearchBarProps) {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+  // isFocused intentionally omitted — we only want this to re-run when query changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
+  // Clicking a suggestion → go to the search results page (same as pressing Enter)
   function handleSelect(title: string) {
     setIsOpen(false);
-    setQuery("");
-    router.push(`/results/${encodeURIComponent(title)}`);
+    setIsFocused(false);
+    setQuery(title);
+    router.push(`/search?q=${encodeURIComponent(title)}`);
   }
 
+  // Enter → search results page; Escape → close dropdown
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && query.trim()) {
       setIsOpen(false);
-      const q = query.trim();
-      setQuery("");
-      router.push(`/results/${encodeURIComponent(q)}`);
+      setIsFocused(false);
+      router.push(`/search?q=${encodeURIComponent(query.trim())}`);
     }
+    if (e.key === "Escape") {
+      setIsOpen(false);
+    }
+  }
+
+  function handleFocus() {
+    setIsFocused(true);
+    if (results.length > 0) setIsOpen(true);
+  }
+
+  function handleBlur() {
+    // Small delay so a click on a suggestion fires before we close
+    setTimeout(() => {
+      setIsFocused(false);
+      setIsOpen(false);
+    }, 150);
   }
 
   const isCompact = variant === "compact";
@@ -93,7 +136,8 @@ export default function SearchBar({ variant = "default" }: SearchBarProps) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => results.length > 0 && setIsOpen(true)}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
           placeholder="Search Wikipedia articles..."
           className={`
             w-full rounded-full border border-gray-200 bg-white placeholder-gray-400
@@ -108,11 +152,14 @@ export default function SearchBar({ variant = "default" }: SearchBarProps) {
         )}
       </div>
 
-      {isOpen && results.length > 0 && (
+      {/* Dropdown — only visible when the user actively has the input focused */}
+      {isFocused && isOpen && results.length > 0 && (
         <div className={`absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-gray-100 bg-white/80 backdrop-blur-xl shadow-xl ${isCompact ? "text-sm" : "text-base"}`}>
           {results.map((result) => (
             <button
               key={result.title}
+              // Prevent the input blur from firing before the click
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => handleSelect(result.title)}
               className="flex w-full flex-col px-5 py-3 text-left transition-colors hover:bg-black/5"
             >
@@ -131,4 +178,3 @@ export default function SearchBar({ variant = "default" }: SearchBarProps) {
     </div>
   );
 }
-

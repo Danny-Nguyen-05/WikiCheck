@@ -14,7 +14,10 @@ export interface SearchResult {
   title: string;
   description: string;
   url: string;
+  /** Plain-text intro excerpt from the article (up to ~400 chars) */
+  extract?: string;
 }
+
 
 export interface Citation {
   id: string;
