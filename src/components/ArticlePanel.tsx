@@ -80,9 +80,11 @@ export default function ArticlePanel({
     // ── Find the best-matching occurrence of this citation number ──────────────
     // Wikipedia reuses citation numbers many times. Score each occurrence by
     // counting claim words in its containing paragraph → pick the best match.
-    const result = verificationResults.get(highlightedCitation);
-    const claim = result?.claim ?? "";
-    const claimWords = claim.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+    // Use sourceSentence for word scoring — CitationResult doesn't carry claim text.
+    // sourceSentence has the full sentence context which is better for scoring anyway.
+    const scoringText = sourceSentences?.get(highlightedCitation) ?? "";
+    const claimWords = scoringText.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+
 
     const allMatchingSups = Array.from(supElements).filter((sup) => {
       const link = sup.querySelector("a");
@@ -162,32 +164,25 @@ export default function ArticlePanel({
 
     const sourceSentence = sourceSentences?.get(highlightedCitation);
     if (sourceSentence && sourceSentence.length >= 10) {
-      // Normalize both strings the same way before comparing:
-      // lowercase + collapse whitespace + replace common special chars.
+      // Normalize both strings identically, using ONLY 1:1 character replacements
+      // (no \s+ collapsing, no .trim()) so that idx in the normalized string is the
+      // EXACT same character position in the original cumText.
       const normalize = (s: string) =>
         s.toLowerCase()
           .replace(/[\u2013\u2014]/g, "-")  // en/em-dash → hyphen
-          .replace(/[\u2018\u2019]/g, "'") // curly single quotes
-          .replace(/[\u201c\u201d]/g, '"') // curly double quotes
-          .replace(/\u00a0/g, " ")         // non-breaking space
-          .replace(/\s+/g, " ").trim();
+          .replace(/[\u2018\u2019]/g, "'")  // curly single quotes
+          .replace(/[\u201c\u201d]/g, '"')  // curly double quotes
+          .replace(/\u00a0/g, " ");         // non-breaking space → space
 
       const normCumText = normalize(cumText);
-      // Use first 60 chars of sourceSentence as the search key
-      const searchKey = normalize(sourceSentence).slice(0, 60);
+      const searchKey = normalize(sourceSentence).slice(0, 60).trim();
 
       if (searchKey.length >= 10) {
         const idx = normCumText.indexOf(searchKey);
         if (idx !== -1) {
-          // idx is a position in the NORMALIZED string. Because our normalization
-          // is mostly 1:1 char replacements (no length changes except \s+ collapse),
-          // we use it as an approximate offset and then scan nearby in the original
-          // cumText to land on the exact start of the first word.
-          // Find the start of the first word at or after idx in original cumText:
-          let approx = Math.min(idx, cumText.length - 1);
-          // Skip any leading whitespace
-          while (approx < cumText.length && /\s/.test(cumText[approx])) approx++;
-          sentenceCharStart = approx;
+          // Since normalize uses only 1:1 char replacements, idx in the
+          // normalized string = exact character position in original cumText.
+          sentenceCharStart = idx;
           foundViaSearch = true;
         }
       }

@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
 import { verifyCitationWithEscalation, verifyCitationWithUrlContext } from "@/lib/gemini";
-
-import { Citation } from "@/lib/parser";
+import { Citation } from "@/lib/types";
 
 const MARKITDOWN_SERVICE_URL = process.env.MARKITDOWN_SERVICE_URL || "http://localhost:3001";
 const MAX_CONCURRENT = 5;
+/** Max time (ms) to spend on a single citation before marking it unverifiable */
+const CITATION_TIMEOUT_MS = 30_000;
 
 interface VerifyRequest {
   citations: Citation[];
@@ -22,7 +23,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use streaming response so frontend gets results one by one
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -30,66 +30,42 @@ export async function POST(request: NextRequest) {
         const sourceCache = new Map<string, { markdown: string; sourceType: string }>();
 
         // Process citations in batches of MAX_CONCURRENT.
-        // Each promise streams its result the instant it resolves —
-        // no waiting for the other 4 in the batch.
+        // Each promise streams its result the instant it resolves.
         for (let i = 0; i < citations.length; i += MAX_CONCURRENT) {
           const batch = citations.slice(i, i + MAX_CONCURRENT);
 
           await Promise.all(
             batch.map(async (citation) => {
+              // Race the verification against a hard per-citation timeout so a
+              // hanging source fetch never blocks the rest of the queue.
+              const timeoutPromise = new Promise<never>((_, reject) =>
+                setTimeout(
+                  () => reject(new Error(`Timeout after ${CITATION_TIMEOUT_MS / 1000}s`)),
+                  CITATION_TIMEOUT_MS
+                )
+              );
+
               let result;
               try {
-                const source = await fetchSource(citation.sourceUrl, citation.pageRange, sourceCache);
-
-                if (!source.markdown) {
-                  console.log(`[Verify] Python service couldn't fetch [${citation.number}], trying Gemini URL context...`);
-                  try {
-                    const urlResult = await verifyCitationWithUrlContext(citation.claim, citation.sourceUrl);
-                    result = {
-                      id: citation.id,
-                      number: citation.number,
-                      verdict: urlResult.verdict,
-                      confidence: urlResult.confidence,
-                      explanation: urlResult.explanation,
-                      relevant_passage: urlResult.relevant_passage,
-                      sourceType: "url_context",
-                    };
-                  } catch {
-                    console.log(`[Verify] URL context also failed for [${citation.number}] — marking unverifiable`);
-                    result = {
-                      id: citation.id,
-                      number: citation.number,
-                      verdict: "unverifiable" as const,
-                      confidence: 0,
-                      explanation: source.error || "Could not access the cited source — the link may be paywalled, broken, or a non-readable format.",
-                      relevant_passage: null,
-                      sourceType: "unavailable",
-                    };
-                  }
-                } else {
-                  const geminiResult = await verifyCitationWithEscalation(
-                    citation.claim,
-                    source.markdown
-                  );
-                  result = {
-                    id: citation.id,
-                    number: citation.number,
-                    verdict: geminiResult.verdict,
-                    confidence: geminiResult.confidence,
-                    explanation: geminiResult.explanation,
-                    relevant_passage: geminiResult.relevant_passage,
-                    sourceType: source.sourceType,
-                  };
-                }
-              } catch {
+                result = await Promise.race([
+                  verifySingleCitation(citation, sourceCache),
+                  timeoutPromise,
+                ]);
+              } catch (err) {
+                const isTimeout = err instanceof Error && err.message.startsWith("Timeout");
+                console.warn(
+                  `[Verify] Citation [${citation.number}] ${isTimeout ? "timed out" : "errored"}: ${err}`
+                );
                 result = {
                   id: citation.id,
                   number: citation.number,
                   verdict: "unverifiable" as const,
                   confidence: 0,
-                  explanation: "Verification failed due to an error",
+                  explanation: isTimeout
+                    ? `Verification timed out after ${CITATION_TIMEOUT_MS / 1000}s — the source may be very slow or unresponsive.`
+                    : "Verification failed due to an error.",
                   relevant_passage: null,
-                  sourceType: "unknown",
+                  sourceType: "unavailable",
                 };
               }
 
@@ -98,7 +74,6 @@ export async function POST(request: NextRequest) {
             })
           );
         }
-
 
         controller.close();
       },
@@ -119,6 +94,66 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * Verify one citation: fetch source → verify with Gemini.
+ * Falls back to Gemini URL context if the Python service can't read the source.
+ */
+async function verifySingleCitation(
+  citation: Citation,
+  sourceCache: Map<string, { markdown: string; sourceType: string }>
+) {
+  const source = await fetchSource(citation.sourceUrl, citation.pageRange, sourceCache);
+
+  if (!source.markdown) {
+    // ── Fallback: try Gemini URL Context (reads the same URL directly) ──────
+    // NOTE: We do NOT fall back to Google Search — that would verify
+    // the claim against a *different* source, defeating the purpose.
+    console.log(
+      `[Verify] Python service couldn't fetch [${citation.number}], trying Gemini URL context...`
+    );
+    try {
+      const urlResult = await verifyCitationWithUrlContext(citation.claim, citation.sourceUrl);
+      return {
+        id: citation.id,
+        number: citation.number,
+        verdict: urlResult.verdict,
+        confidence: urlResult.confidence,
+        explanation: urlResult.explanation,
+        relevant_passage: urlResult.relevant_passage,
+        sourceType: "url_context",
+      };
+    } catch {
+      // Both fetchers failed — cannot read this source at all
+      console.log(
+        `[Verify] URL context also failed for [${citation.number}] — marking unverifiable`
+      );
+      return {
+        id: citation.id,
+        number: citation.number,
+        verdict: "unverifiable" as const,
+        confidence: 0,
+        explanation:
+          source.error ||
+          "Could not access the cited source — the link may be paywalled, broken, or a non-readable format.",
+        relevant_passage: null,
+        sourceType: "unavailable",
+      };
+    }
+  }
+
+  // Verify with Gemini
+  const geminiResult = await verifyCitationWithEscalation(citation.claim, source.markdown);
+  return {
+    id: citation.id,
+    number: citation.number,
+    verdict: geminiResult.verdict,
+    confidence: geminiResult.confidence,
+    explanation: geminiResult.explanation,
+    relevant_passage: geminiResult.relevant_passage,
+    sourceType: source.sourceType,
+  };
+}
+
 async function fetchSource(
   url: string,
   pageRange: string | undefined,
@@ -126,19 +161,17 @@ async function fetchSource(
 ): Promise<{ markdown: string | null; sourceType: string; error?: string }> {
   const cacheKey = pageRange ? `${url}#${pageRange}` : url;
 
-  // Check cache first
   if (cache.has(cacheKey)) {
     const cached = cache.get(cacheKey)!;
     return { markdown: cached.markdown, sourceType: cached.sourceType };
   }
 
   try {
-    // Try Python microservice first
     const serviceResponse = await fetch(`${MARKITDOWN_SERVICE_URL}/convert`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, page_range: pageRange }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(25000), // 25s — leaves room within the 30s citation timeout
     });
 
     const data = await serviceResponse.json();
@@ -148,7 +181,6 @@ async function fetchSource(
       return { markdown: data.markdown, sourceType: data.source_type };
     }
 
-    // Fall back to basic fetch
     return await fallbackFetchSource(url, cacheKey, cache);
   } catch {
     return await fallbackFetchSource(url, cacheKey, cache);
@@ -163,7 +195,7 @@ async function fallbackFetchSource(
   try {
     const response = await fetch(url, {
       headers: { "User-Agent": "WikiCheck/1.0 (Citation Verification Tool)" },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(12000), // 12s for direct fetch
     });
 
     if (!response.ok) {
@@ -178,11 +210,7 @@ async function fallbackFetchSource(
 
     const contentType = response.headers.get("content-type") || "";
     if (!contentType.includes("text/") && !contentType.includes("html")) {
-      return {
-        markdown: null,
-        sourceType: "unavailable",
-        error: "Cannot read non-text source",
-      };
+      return { markdown: null, sourceType: "unavailable", error: "Cannot read non-text source" };
     }
 
     const html = await response.text();

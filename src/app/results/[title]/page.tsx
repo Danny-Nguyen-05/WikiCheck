@@ -66,14 +66,17 @@ export default function ResultsPage() {
     return byNumber;
   }, [verificationResults]);
 
-  // Build sourceSentence map for ArticlePanel's direct text search
+  // Build claim text map for ArticlePanel's direct text search.
+  // Use c.claim (the extracted last sentence) — NOT c.sourceSentence (full block).
+  // c.claim is exactly the sentence ending at the <sup>, which is what we highlight.
   const sourceSentencesMap = useMemo(() => {
     const m = new Map<number, string>();
     citations.forEach((c) => {
-      if (c.sourceSentence) m.set(c.number, c.sourceSentence);
+      if (c.claim) m.set(c.number, c.claim);
     });
     return m;
   }, [citations]);
+
 
   // ── Fetch article (or restore from sessionStorage cache) ───────────────────
   useEffect(() => {

@@ -27,7 +27,7 @@ export function parseCitations(html: string): Citation[] {
     // Find the first external link inside this reference item
     // Wikipedia typically uses class="external text" or similar for external URLs
     const linkMatch = liContent.match(/<a[^>]*class="[^"]*external[^"]*"[^>]*href="([^"]+)"/i);
-    
+
     if (linkMatch) {
       const url = linkMatch[1].replace(/&amp;/g, "&");
       if (isValidUrl(url)) {
@@ -39,7 +39,7 @@ export function parseCitations(html: string): Citation[] {
         if (pageMatch) {
           pageRange = pageMatch[1].replace(/\u2013/g, "-").trim();
         }
-        
+
         parsedSourcesById.set(liId, { url, pageRange });
       }
     }
@@ -55,14 +55,14 @@ export function parseCitations(html: string): Citation[] {
   while ((match = supRegex.exec(html)) !== null) {
     const supStart = match.index;
     const citeNoteId = match[1];
-    
+
     // Clean up the inner HTML of the link to get the exact text shown to the user
     // This resolves issues with entities like &#91; showing up as '91'
     const linkInnerHtml = match[2];
     const linkText = linkInnerHtml.replace(/<[^>]+>/g, "").replace(/&#91;/g, "[").replace(/&#93;/g, "]");
     const numMatch = linkText.match(/\d+/);
     if (!numMatch) continue;
-    
+
     const visibleNumber = parseInt(numMatch[0], 10);
     const citeRefId = `${citeNoteId}-${visibleNumber}`; // fallback ID
 
@@ -134,7 +134,7 @@ function extractClaimHTML(html: string, index: number): { claim: string; sourceS
 
   // Remove exiting bracketed inline citations like [1] or [note 1]
   clean = clean.replace(/\[(?:note\s*)?\d+[a-z]*\]/gi, "");
-  
+
   // Clean up remaining generic entities
   clean = clean.replace(/&#?\w+;/g, "");
 
