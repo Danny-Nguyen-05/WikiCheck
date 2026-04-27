@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type { CitationResult, Verdict } from "@/lib/types";
 
 interface ArticlePanelProps {
@@ -20,6 +21,46 @@ const verdictColorClass: Record<Verdict, string> = {
   unverifiable: "wikicheck-unverifiable",
 };
 
+const wikiArticleNamespaces = new Set([
+  "File",
+  "Category",
+  "Help",
+  "Special",
+  "Template",
+  "Talk",
+  "User",
+  "Wikipedia",
+  "Portal",
+  "Draft",
+  "Module",
+  "MediaWiki",
+  "TimedText",
+]);
+
+function getWikiArticleTitle(href: string): string | null {
+  let pathname = href;
+
+  try {
+    const url = href.startsWith("http") ? new URL(href) : null;
+    if (url) {
+      if (!url.hostname.endsWith("wikipedia.org")) return null;
+      pathname = url.pathname;
+    }
+  } catch {
+    return null;
+  }
+
+  if (!pathname.startsWith("/wiki/")) return null;
+
+  const encodedTitle = pathname.slice("/wiki/".length);
+  if (!encodedTitle) return null;
+
+  const title = decodeURIComponent(encodedTitle).replace(/_/g, " ");
+  const namespace = title.split(":", 1)[0];
+
+  return wikiArticleNamespaces.has(namespace) ? null : title;
+}
+
 export default function ArticlePanel({
   html,
   title,
@@ -28,6 +69,7 @@ export default function ArticlePanel({
   sourceSentences,
 }: ArticlePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   const applyCitationHighlights = useCallback(() => {
     if (!containerRef.current) return;
@@ -253,6 +295,26 @@ export default function ArticlePanel({
     applyCitationHighlights();
   }, [applyCitationHighlights]);
 
+  const handleArticleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const link = target.closest("a");
+      if (!link) return;
+
+      const href = link.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+
+      const linkedTitle = getWikiArticleTitle(href);
+      if (!linkedTitle) return;
+
+      event.preventDefault();
+      router.push(`/results/${encodeURIComponent(linkedTitle)}`);
+    },
+    [router]
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-black">
       <div className="shrink-0 border-b border-gray-200 bg-white px-6 py-4">
@@ -260,6 +322,7 @@ export default function ArticlePanel({
       </div>
       <div
         ref={containerRef}
+        onClick={handleArticleClick}
         className="min-h-0 flex-1 overflow-y-auto overscroll-y-none bg-white px-6 py-4 wikipedia-content"
         dangerouslySetInnerHTML={{ __html: html }}
       />
