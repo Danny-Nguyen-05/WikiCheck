@@ -247,20 +247,20 @@ export default function ArticlePanel({
         "pl-2"
       );
     }
-  }, [verificationResults, highlightedCitation]);
+  }, [verificationResults, highlightedCitation, sourceSentences]);
 
   useEffect(() => {
     applyCitationHighlights();
   }, [applyCitationHighlights]);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-white text-black">
-      <div className="border-b border-gray-200 bg-white px-6 py-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white text-black">
+      <div className="shrink-0 border-b border-gray-200 bg-white px-6 py-4">
         <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
       </div>
       <div
         ref={containerRef}
-        className="flex-1 overflow-y-auto overscroll-y-none bg-white px-6 py-4 wikipedia-content"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-y-none bg-white px-6 py-4 wikipedia-content"
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>

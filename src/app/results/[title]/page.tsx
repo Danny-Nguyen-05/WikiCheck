@@ -259,7 +259,7 @@ export default function ResultsPage() {
 
   if (error && !articleHtml) {
     return (
-      <main className="flex flex-1 items-center justify-center">
+      <main className="flex h-dvh items-center justify-center overflow-hidden">
         <div className="text-center">
           <h1 className="mb-2 text-2xl font-bold text-gray-900 ">
             {error}
@@ -280,7 +280,7 @@ export default function ResultsPage() {
 
   if (isLoadingArticle) {
     return (
-      <main className="flex flex-1 items-center justify-center">
+      <main className="flex h-dvh items-center justify-center overflow-hidden">
         <div className="text-center">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
           <p className="text-gray-600 ">Loading article...</p>
@@ -290,7 +290,7 @@ export default function ResultsPage() {
   }
 
   return (
-    <main className="flex flex-col overflow-hidden bg-[#fbfbfd]" style={{ height: "100vh" }}>
+    <main className="fixed inset-0 flex flex-col overflow-hidden bg-[#fbfbfd]">
       {/* Top Header Bar */}
       <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white/80 px-6 backdrop-blur-md">
         <div className="flex flex-1 items-center gap-6">
@@ -367,7 +367,7 @@ export default function ResultsPage() {
         {(mode === "picking" || mode === "verifying") && (
           <div 
             style={{ width: `${panelWidth}%` }}
-            className="shrink-0 overflow-hidden bg-white shadow-[-4px_0_24px_rgba(0,0,0,0.02)] max-md:!w-full"
+            className="min-h-0 shrink-0 overflow-hidden bg-white shadow-[-4px_0_24px_rgba(0,0,0,0.02)] max-md:!w-full"
           >
             {mode === "picking" && (
               <CitationPicker

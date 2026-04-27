@@ -73,8 +73,8 @@ export default function VerificationPanel({
   const hasRemaining = pendingCount > 0;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="space-y-3 border-b border-gray-200 bg-white px-4 py-4  ">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 space-y-3 border-b border-gray-200 bg-white px-4 py-4  ">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {onBack && (
@@ -136,7 +136,7 @@ export default function VerificationPanel({
         <FilterBar active={filter} onChange={setFilter} counts={counts} />
       </div>
 
-      <div className="flex-1 overflow-y-auto overscroll-y-none p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-none p-4">
         <div className="space-y-3">
           {filteredCitations.map((citation) => {
             const result = results.get(citation.id);

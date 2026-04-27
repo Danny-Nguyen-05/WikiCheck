@@ -39,9 +39,9 @@ export default function CitationPicker({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
-      <div className="border-b border-gray-200 bg-white px-4 py-4  ">
+      <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-4  ">
         <h2 className="text-lg font-bold text-gray-900 ">
           Select Verifiable Citations
         </h2>
@@ -65,7 +65,7 @@ export default function CitationPicker({
       </div>
 
       {/* Citation list */}
-      <div className="flex-1 overflow-y-auto overscroll-y-none p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-none p-4">
         <div className="space-y-2">
           {citations.map((citation) => (
             <button
@@ -111,7 +111,7 @@ export default function CitationPicker({
       </div>
 
       {/* Footer buttons */}
-      <div className="flex gap-3 border-t border-gray-200 bg-white px-4 py-3  ">
+      <div className="shrink-0 flex gap-3 border-t border-gray-200 bg-white px-4 py-3  ">
         <button
           onClick={onCancel}
           className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50   "
