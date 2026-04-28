@@ -6,14 +6,10 @@ import Link from "next/link";
 import SearchBar from "@/components/SearchBar";
 import type { SearchResult } from "@/lib/types";
 
-/** Wikipedia "W" logo rendered as an inline SVG square — matches the Google result favicon style */
 function WikipediaFavicon() {
   return (
-    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px] bg-[#1a1a1a]">
-      {/* Classic Wikipedia W */}
-      <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="white">
-        <path d="M12.09 2C6.545 2 2 6.544 2 12.09c0 4.48 2.886 8.312 6.918 9.69l.072-.122L12 16.3l3.01 5.458.072.123C19.114 20.402 22 16.57 22 12.09 22 6.544 17.455 2 12.09 2zm-.497 3.5h.832l1.666 6.168.972-3.668h.808L16.4 14.5l1.4-5.668h.8l-1.8 7h-.832l-1.087-4.1-1.087 4.1h-.832l-1.8-7h.8l1.4 5.668.972-3.5-1.532-5.5zM7.8 7.832h.8l1.8 7h-.832l-1.087-4.1L7.4 14.832h-.832l-1.8-7h.8l1.4 5.668.972-3.5-1.14-4.168z" />
-      </svg>
+    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px]">
+      <img src="/wikipedia-logo.png" alt="Wikipedia" className="h-[18px] w-[18px] object-contain" />
     </div>
   );
 }
