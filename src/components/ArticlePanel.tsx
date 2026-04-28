@@ -306,11 +306,26 @@ export default function ArticlePanel({
       const href = link.getAttribute("href");
       if (!href || href.startsWith("#")) return;
 
-      const linkedTitle = getWikiArticleTitle(href);
-      if (!linkedTitle) return;
+      // Let modifier-clicks keep native browser behavior (open new tab, etc.)
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button === 1) return;
 
+      const linkedTitle = getWikiArticleTitle(href);
+      if (linkedTitle) {
+        event.preventDefault();
+        router.push(`/results/${encodeURIComponent(linkedTitle)}`);
+        return;
+      }
+
+      // Prevent navigation away from the app for all other links (e.g. /w/index.php
+      // "View source" on protected articles). Resolve relative Wikipedia URLs so they
+      // open correctly in a new tab.
       event.preventDefault();
-      router.push(`/results/${encodeURIComponent(linkedTitle)}`);
+      const absoluteHref = href.startsWith("//")
+        ? `https:${href}`
+        : href.startsWith("/")
+        ? `https://en.wikipedia.org${href}`
+        : href;
+      window.open(absoluteHref, "_blank", "noopener,noreferrer");
     },
     [router]
   );
